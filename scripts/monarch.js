@@ -356,7 +356,7 @@ class CoffeePubMonarch {
                 originalState.set(this.name, this.checked);
             });
 
-            // Update module checkboxes
+            // Update module checkboxes and clear all highlights
             form.find('input[type="checkbox"]').each(function() {
                 const moduleId = this.name;
                 const wasChecked = originalState.get(moduleId);
@@ -367,12 +367,18 @@ class CoffeePubMonarch {
                 
                 // Clear existing highlights
                 const packageElem = $(this).closest('.package');
-                packageElem.removeClass('module-enabled-change module-disabled-change');
+                packageElem.removeClass('module-enabled-change module-disabled-change module-current-change');
                 
-                // Add highlight if changed
+                // Add highlight if changed from the selected set's state
                 if (wasChecked !== willBeChecked) {
                     packageElem.addClass(willBeChecked ? 'module-enabled-change' : 'module-disabled-change');
                 }
+            });
+
+            // Reset the initial state map to match the newly selected set
+            initialModuleStates.clear();
+            form.find('input[type="checkbox"]').each(function() {
+                initialModuleStates.set(this.name, this.checked);
             });
         });
 
