@@ -17,6 +17,33 @@ class CoffeePubMonarch {
 
         // Hook into the Module Management Application
         Hooks.on('renderModuleManagement', this._onRenderModuleManagement.bind(this));
+        
+        // Hook into module dependency changes
+        Hooks.on('renderDialog', (dialog, html) => {
+            if (dialog.data.title === "Manage Module Dependencies") {
+                // Find the confirm button and add our listener
+                const confirmBtn = html.find('button.yes');
+                if (confirmBtn.length) {
+                    confirmBtn.on('click', () => {
+                        // Use setTimeout to ensure the module states have been updated
+                        setTimeout(() => {
+                            // Find the module management window
+                            const moduleManager = document.querySelector('#module-management');
+                            if (!moduleManager) return;
+                            
+                            // Get our stored event handlers
+                            const $html = $(moduleManager);
+                            const updateCurrentStateHighlight = $html.data('updateCurrentStateHighlight');
+                            const updateButtonVisibility = $html.data('updateButtonVisibility');
+                            
+                            // Update our UI if we have the handlers
+                            if (updateCurrentStateHighlight) updateCurrentStateHighlight();
+                            if (updateButtonVisibility) updateButtonVisibility();
+                        }, 100); // Give a bit more time for the changes to apply
+                    });
+                }
+            }
+        });
     }
 
     static async _initializeDefaultSet() {
@@ -128,6 +155,10 @@ class CoffeePubMonarch {
             // Show update button if there are changes
             html.find('.update-module-set').toggle(!isCurrentState);
         };
+
+        // Store the highlight update function so we can access it from hooks
+        html.closest('#module-management').data('updateCurrentStateHighlight', updateCurrentStateHighlight);
+        html.closest('#module-management').data('updateButtonVisibility', updateButtonVisibility);
 
         // Add change handler to all checkboxes for both update button and highlighting
         const form = html.closest('#module-management');
