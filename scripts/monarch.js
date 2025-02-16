@@ -186,8 +186,18 @@ class CoffeePubMonarch {
                 return;
             }
 
+            // Get current active modules to compare
+            const currentActiveModules = Array.from(game.modules.keys()).filter(id => game.modules.get(id)?.active);
             const moduleSets = game.settings.get(this.ID, 'moduleSets');
             const moduleSet = moduleSets[setName];
+
+            // Check if the selected set matches current state
+            const isCurrentState = moduleSet.length === currentActiveModules.length && 
+                moduleSet.every(id => currentActiveModules.includes(id)) &&
+                currentActiveModules.every(id => moduleSet.includes(id));
+
+            // Only show load button if the selected set is different from current state
+            loadButton.toggle(!isCurrentState);
 
             // Get current state before changes
             const originalState = new Map();
@@ -214,9 +224,6 @@ class CoffeePubMonarch {
                     packageElem.addClass(willBeChecked ? 'module-enabled-change' : 'module-disabled-change');
                 }
             });
-
-            // Show the load button
-            loadButton.show();
         });
 
         // Load Set button click
