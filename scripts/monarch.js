@@ -59,9 +59,15 @@ class CoffeePubMonarch {
             localize: (key) => game.i18n.localize(`${this.ID}.moduleSet.${key}`)
         });
         
-        // Insert our controls before the save button
-        const saveButton = html.find('button[type="submit"]');
-        $(moduleSetControls).insertBefore(saveButton);
+        // Insert our controls after the filter input
+        const filterInput = html.find('input[name="filter"]');
+        if (filterInput.length) {
+            $(moduleSetControls).insertAfter(filterInput.parent());
+        } else {
+            // Fallback: insert at the top of the form
+            const form = html.find('form');
+            form.prepend(moduleSetControls);
+        }
 
         // Bind our event listeners
         this._activateListeners(html, app);
@@ -74,9 +80,10 @@ class CoffeePubMonarch {
             
             // Capture current module states before opening dialog
             const currentModules = [];
-            html.closest('#module-management').find('input[type="checkbox"]').each(function() {
-                if (this.checked) currentModules.push(this.name);
-            });
+            const moduleConfig = game.settings.get('core', 'moduleConfiguration') || {};
+            for (let [moduleId, isActive] of Object.entries(moduleConfig)) {
+                if (isActive) currentModules.push(moduleId);
+            }
             
             // Get current module sets for the dropdown
             const moduleSets = game.settings.get(this.ID, 'moduleSets');
@@ -147,8 +154,15 @@ class CoffeePubMonarch {
                             updatedModuleSets[setName] = currentModules;
                             await game.settings.set(this.ID, 'moduleSets', updatedModuleSets);
                             
-                            // Refresh the window
-                            app.render(true);
+                            // Update just our dropdown
+                            const moduleSetSelect = app.element.find('.load-module-set');
+                            const existingSets = Object.keys(updatedModuleSets);
+                            moduleSetSelect.empty().append(`<option value="">-- Select a Module Set --</option>`);
+                            existingSets.forEach(set => {
+                                moduleSetSelect.append(`<option value="${set}">${set}</option>`);
+                            });
+                            moduleSetSelect.val(setName);
+                            app.element.find('.load-set-button').show();
                         }
                     },
                     cancel: {
@@ -215,8 +229,11 @@ class CoffeePubMonarch {
             const moduleSets = game.settings.get(this.ID, 'moduleSets');
             const moduleSet = moduleSets[setName];
 
-            // Update the core module configuration
-            const moduleConfig = {};
+            // Get the current module configuration first
+            const currentConfig = game.settings.get('core', 'moduleConfiguration') || {};
+            
+            // Update only the modules we know about
+            const moduleConfig = {...currentConfig};
             for (let moduleId of game.modules.keys()) {
                 moduleConfig[moduleId] = moduleSet.includes(moduleId);
             }
@@ -244,8 +261,14 @@ class CoffeePubMonarch {
             delete moduleSets[setName];
             await game.settings.set(this.ID, 'moduleSets', moduleSets);
             
-            // Refresh just the module management window
-            app.render(true);
+            // Just update our dropdown instead of re-rendering the whole window
+            const existingSets = Object.keys(moduleSets);
+            select.empty().append(`<option value="">-- Select a Module Set --</option>`);
+            existingSets.forEach(set => {
+                select.append(`<option value="${set}">${set}</option>`);
+            });
+            select.val('');
+            html.find('.load-set-button').hide();
         });
     }
 }
