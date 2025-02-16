@@ -1,0 +1,14 @@
+{
+    "coffee-pub-monarch": {
+        "moduleSet": {
+            "title": "Module Sets",
+            "save": "Save",
+            "delete": "Delete Set",
+            "select": "-- Select a Module Set --",
+            "savePrompt": "Enter name for new module set:",
+            "updateExisting": "Or Update Existing:",
+            "createNew": "Create New Set",
+            "deleteConfirm": "Are you sure you want to delete the module set \"{name}\"?"
+        }
+    }
+} 

@@ -1,0 +1,40 @@
+.module-set-controls {
+    margin: 1em 0;
+    padding: 0.5em;
+    border: 1px solid var(--color-border-light-tertiary);
+    border-radius: 3px;
+}
+
+.module-set-controls .form-group {
+    margin: 0;
+}
+
+.module-set-controls .form-fields {
+    display: flex;
+    gap: 0.5em;
+    align-items: center;
+}
+
+.module-set-controls select.load-module-set {
+    flex: 1;
+}
+
+.module-set-controls button {
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+
+.module-set-controls button i {
+    margin: 0;
+}
+
+/* Module change highlighting */
+.package.module-enabled-change {
+    background: rgba(0, 255, 0, 0.1);
+}
+
+.package.module-disabled-change {
+    background: rgba(255, 0, 0, 0.1);
+} 

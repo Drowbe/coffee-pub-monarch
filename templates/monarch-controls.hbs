@@ -1,0 +1,22 @@
+<div class="module-set-controls">
+    <div class="form-group">
+        <label>Module Sets</label>
+        <div class="form-fields">
+            <select class="load-module-set">
+                <option value="">-- Select a Module Set --</option>
+                {{#each moduleSets as |modules setName|}}
+                <option value="{{setName}}" {{#if (eq setName ../currentSet)}}selected{{/if}}>{{setName}}</option>
+                {{/each}}
+            </select>
+            <button type="button" class="load-set-button" style="display: none;">
+                <i class="fas fa-download"></i> Load Set
+            </button>
+            <button type="button" class="save-module-set">
+                <i class="fas fa-save"></i> Save Set
+            </button>
+            <button type="button" class="delete-module-set">
+                <i class="fas fa-trash"></i> Delete
+            </button>
+        </div>
+    </div>
+</div> 

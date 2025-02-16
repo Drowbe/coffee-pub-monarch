@@ -1,0 +1,40 @@
+{
+  "id": "coffee-pub-monarch",
+  "title": "Coffee Pub Monarch",
+  "description": "Adds the ability to save and load sets of enabled modules in Foundry VTT.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "12",
+    "verified": "12",
+    "maximum": "13"
+  },
+  "authors": [
+    {
+      "name": "drowbe",
+      "discord": "drowbe"
+    }
+  ],
+  "esmodules": [
+    "scripts/monarch.js"
+  ],
+  "styles": [
+    "styles/monarch.css"
+  ],
+  "templates": [
+    "templates/monarch-controls.hbs"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "languages/en.json",
+      "flags": {}
+    }
+  ],
+  "changelog": "CHANGELOG.md",
+  "license": "LICENSE",
+  "readme": "README.md",
+  "url": "https://github.com/Drowbe/coffee-pub-monarch",
+  "manifest": "https://raw.githubusercontent.com/Drowbe/coffee-pub-monarch/master/module.json",
+  "download": "https://github.com/Drowbe/coffee-pub-monarch/releases/download/1.0.0/module.zip"
+} 
