@@ -37,4 +37,8 @@
 
 .package.module-disabled-change {
     background: rgba(255, 0, 0, 0.1);
+}
+
+.package.module-current-change {
+    background: rgba(255, 255, 0, 0.1);
 } 

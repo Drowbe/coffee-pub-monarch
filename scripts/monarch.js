@@ -39,6 +39,12 @@ class CoffeePubMonarch {
         const moduleSets = game.settings.get(this.ID, 'moduleSets');
         console.warn("COFFEE-PUB-MONARCH | Rendering with moduleSets:", moduleSets);
         
+        // Store initial module states
+        const initialModuleStates = new Map();
+        html.find('input[type="checkbox"]').each(function() {
+            initialModuleStates.set(this.name, this.checked);
+        });
+        
         // Get current active modules
         const currentActiveModules = Array.from(game.modules.keys()).filter(id => game.modules.get(id)?.active);
         
@@ -74,6 +80,30 @@ class CoffeePubMonarch {
     }
 
     static _activateListeners(html, app) {
+        // Store initial module states
+        const initialModuleStates = new Map();
+        html.find('input[type="checkbox"]').each(function() {
+            initialModuleStates.set(this.name, this.checked);
+        });
+
+        // Function to update current state highlighting
+        const updateCurrentStateHighlight = () => {
+            html.find('input[type="checkbox"]').each(function() {
+                const moduleId = this.name;
+                const initialState = initialModuleStates.get(moduleId);
+                const currentState = this.checked;
+                const packageElem = $(this).closest('.package');
+                
+                // Remove current change highlight if it exists
+                packageElem.removeClass('module-current-change');
+                
+                // Add highlight if changed from initial state
+                if (initialState !== currentState) {
+                    packageElem.addClass('module-current-change');
+                }
+            });
+        };
+
         // Function to check for changes and update button visibility
         const updateButtonVisibility = () => {
             const setName = html.find('.load-module-set').val();
@@ -99,14 +129,19 @@ class CoffeePubMonarch {
             html.find('.update-module-set').toggle(!isCurrentState);
         };
 
-        // Add change handler to all checkboxes
+        // Add change handler to all checkboxes for both update button and highlighting
         const form = html.closest('#module-management');
-        form.on('change', 'input[type="checkbox"]', updateButtonVisibility);
+        form.on('change', 'input[type="checkbox"]', function() {
+            updateButtonVisibility();
+            updateCurrentStateHighlight();
+        });
 
-        // Also trigger when clicking package headers (which can toggle modules)
+        // Also trigger when clicking package headers
         form.on('click', '.package-header', function() {
-            // Use setTimeout to ensure the checkbox state has been updated
-            setTimeout(updateButtonVisibility, 0);
+            setTimeout(() => {
+                updateButtonVisibility();
+                updateCurrentStateHighlight();
+            }, 0);
         });
 
         // Save as New button click
