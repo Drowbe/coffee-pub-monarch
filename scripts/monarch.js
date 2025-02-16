@@ -74,20 +74,51 @@ class CoffeePubMonarch {
     }
 
     static _activateListeners(html, app) {
-        // Save current module set
-        html.find('.save-module-set').click(async (event) => {
+        // Function to check for changes and update button visibility
+        const updateButtonVisibility = () => {
+            const setName = html.find('.load-module-set').val();
+            if (!setName) {
+                html.find('.update-module-set').hide();
+                return;
+            }
+
+            // Get current checked modules from the form
+            const currentModules = [];
+            html.find('input[type="checkbox"]').each(function() {
+                if (this.checked) currentModules.push(this.name);
+            });
+
+            // Compare with selected set
+            const moduleSets = game.settings.get(this.ID, 'moduleSets');
+            const moduleSet = moduleSets[setName];
+            const isCurrentState = moduleSet.length === currentModules.length && 
+                moduleSet.every(id => currentModules.includes(id)) &&
+                currentModules.every(id => moduleSet.includes(id));
+
+            // Show update button if there are changes
+            html.find('.update-module-set').toggle(!isCurrentState);
+        };
+
+        // Add change handler to all checkboxes
+        const form = html.closest('#module-management');
+        form.on('change', 'input[type="checkbox"]', updateButtonVisibility);
+
+        // Also trigger when clicking package headers (which can toggle modules)
+        form.on('click', '.package-header', function() {
+            // Use setTimeout to ensure the checkbox state has been updated
+            setTimeout(updateButtonVisibility, 0);
+        });
+
+        // Save as New button click
+        html.find('.save-new-module-set').click(async (event) => {
             event.preventDefault();
             
-            // Capture current module states before opening dialog
+            // Capture current module states
             const currentModules = [];
             const moduleConfig = game.settings.get('core', 'moduleConfiguration') || {};
             for (let [moduleId, isActive] of Object.entries(moduleConfig)) {
                 if (isActive) currentModules.push(moduleId);
             }
-            
-            // Get current module sets for the dropdown
-            const moduleSets = game.settings.get(this.ID, 'moduleSets');
-            const existingSets = Object.keys(moduleSets);
             
             const content = `
                 <form>
@@ -95,15 +126,6 @@ class CoffeePubMonarch {
                         <label>${game.i18n.localize(`${this.ID}.moduleSet.savePrompt`)}</label>
                         <div class="form-fields">
                             <input type="text" name="setName" required>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Or Update Existing:</label>
-                        <div class="form-fields">
-                            <select name="existingSet">
-                                <option value="">Create New Set</option>
-                                ${existingSets.map(set => `<option value="${set}">${set}</option>`).join('')}
-                            </select>
                         </div>
                     </div>
                 </form>`;
@@ -114,26 +136,24 @@ class CoffeePubMonarch {
                 buttons: {
                     saveAndApply: {
                         icon: '<i class="fas fa-save"></i>',
-                        label: "Save and Apply",
+                        label: "Save and Reload",
                         callback: async (html) => {
                             const form = html.find('form')[0];
-                            const setName = form.existingSet.value || form.setName.value;
+                            const setName = form.setName.value;
                             if (!setName) return;
 
                             try {
-                                // First save the module set
+                                // Save the new module set
                                 const updatedModuleSets = game.settings.get(this.ID, 'moduleSets');
                                 updatedModuleSets[setName] = currentModules;
                                 await game.settings.set(this.ID, 'moduleSets', updatedModuleSets);
                                 
-                                // Then update the active modules in core settings
+                                // Update core settings and reload
                                 const moduleConfig = {};
                                 for (let moduleId of game.modules.keys()) {
                                     moduleConfig[moduleId] = currentModules.includes(moduleId);
                                 }
                                 await game.settings.set('core', 'moduleConfiguration', moduleConfig);
-
-                                // Force a reload to apply changes
                                 window.location.reload();
                             } catch (error) {
                                 console.error("COFFEE-PUB-MONARCH | Error saving module set:", error);
@@ -146,10 +166,10 @@ class CoffeePubMonarch {
                         label: "Save Only",
                         callback: async (html) => {
                             const form = html.find('form')[0];
-                            const setName = form.existingSet.value || form.setName.value;
+                            const setName = form.setName.value;
                             if (!setName) return;
 
-                            // Use the captured module states
+                            // Save the new module set
                             const updatedModuleSets = game.settings.get(this.ID, 'moduleSets');
                             updatedModuleSets[setName] = currentModules;
                             await game.settings.set(this.ID, 'moduleSets', updatedModuleSets);
@@ -162,7 +182,6 @@ class CoffeePubMonarch {
                                 moduleSetSelect.append(`<option value="${set}">${set}</option>`);
                             });
                             moduleSetSelect.val(setName);
-                            app.element.find('.load-set-button').show();
                         }
                     },
                     cancel: {
@@ -176,6 +195,68 @@ class CoffeePubMonarch {
             dialog.render(true);
         });
 
+        // Update button click
+        html.find('.update-module-set').click(async (event) => {
+            event.preventDefault();
+            
+            const setName = html.find('.load-module-set').val();
+            if (!setName) return;
+
+            // Capture current module states
+            const currentModules = [];
+            const moduleConfig = game.settings.get('core', 'moduleConfiguration') || {};
+            for (let [moduleId, isActive] of Object.entries(moduleConfig)) {
+                if (isActive) currentModules.push(moduleId);
+            }
+
+            const dialog = new Dialog({
+                title: game.i18n.localize(`${this.ID}.moduleSet.title`),
+                content: `<p>Update "${setName}" with current module selection?</p>`,
+                buttons: {
+                    updateAndApply: {
+                        icon: '<i class="fas fa-save"></i>',
+                        label: "Update and Reload",
+                        callback: async () => {
+                            try {
+                                // Update the module set
+                                const updatedModuleSets = game.settings.get(this.ID, 'moduleSets');
+                                updatedModuleSets[setName] = currentModules;
+                                await game.settings.set(this.ID, 'moduleSets', updatedModuleSets);
+                                
+                                // Update core settings and reload
+                                const moduleConfig = {};
+                                for (let moduleId of game.modules.keys()) {
+                                    moduleConfig[moduleId] = currentModules.includes(moduleId);
+                                }
+                                await game.settings.set('core', 'moduleConfiguration', moduleConfig);
+                                window.location.reload();
+                            } catch (error) {
+                                console.error("COFFEE-PUB-MONARCH | Error updating module set:", error);
+                                ui.notifications.error("Failed to update module set. Check the console for details.");
+                            }
+                        }
+                    },
+                    updateOnly: {
+                        icon: '<i class="fas fa-save"></i>',
+                        label: "Update Only",
+                        callback: async () => {
+                            // Update the module set
+                            const updatedModuleSets = game.settings.get(this.ID, 'moduleSets');
+                            updatedModuleSets[setName] = currentModules;
+                            await game.settings.set(this.ID, 'moduleSets', updatedModuleSets);
+                        }
+                    },
+                    cancel: {
+                        icon: '<i class="fas fa-times"></i>',
+                        label: "Cancel"
+                    }
+                },
+                default: 'updateAndApply'
+            });
+
+            dialog.render(true);
+        });
+
         // Load module set selection
         html.find('.load-module-set').change(async (event) => {
             const setName = event.target.value;
@@ -183,6 +264,7 @@ class CoffeePubMonarch {
             
             if (!setName) {
                 loadButton.hide();
+                html.find('.update-module-set').hide();
                 return;
             }
 
@@ -198,6 +280,8 @@ class CoffeePubMonarch {
 
             // Only show load button if the selected set is different from current state
             loadButton.toggle(!isCurrentState);
+            // Hide update button initially since no changes yet
+            html.find('.update-module-set').hide();
 
             // Get current state before changes
             const originalState = new Map();
