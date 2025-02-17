@@ -8,6 +8,9 @@ A FoundryVTT module that allows you to save and load different sets of module co
 ### Visual Feedback for Module Changes
 ![Module Changes](product/module-changes.png)
 
+### Module Set Changes
+![Module Changes](product/module-change-set.png)
+
 ## Features
 
 - Save your current module configuration as a named set
@@ -35,10 +38,9 @@ https://raw.githubusercontent.com/Drowbe/coffee-pub-monarch/master/module.json
    - "Delete" button to remove saved sets
    - "Export Sets" and "Import Sets" buttons for sharing configurations
 
-When you select a module set from the dropdown:
-- Modules that will be enabled are highlighted in green
-- Modules that will be disabled are highlighted in red
-- Changes to the current configuration are highlighted in yellow (as shown in the second screenshot)
+Visual Feedback:
+- When selecting a module set: modules that will change are highlighted in green (to be enabled) or red (to be disabled)
+- When modifying the current set: changed modules are highlighted in yellow to show what will be included in the update
 
 ## License
 
