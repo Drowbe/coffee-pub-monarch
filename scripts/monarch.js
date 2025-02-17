@@ -459,6 +459,7 @@ class CoffeePubMonarch {
 
             const content = `
                 <form>
+                    <h2 style="margin-bottom: 0.5em;">Import Module Sets</h2>
                     <div class="form-group">
                         <label>Select a module sets file to import:</label>
                         <div class="form-fields">
@@ -553,6 +554,26 @@ ${extraModules.length ? extraModules.join('\n') : 'None'}`;
                                     existingSets.forEach(set => {
                                         moduleSetSelect.append(`<option value="${set}">${set}</option>`);
                                     });
+
+                                    // Show reload prompt
+                                    const reloadDialog = new Dialog({
+                                        title: "Reload Required",
+                                        content: `<p>Module sets have been imported successfully. The page needs to be reloaded for the changes to take full effect.</p>`,
+                                        buttons: {
+                                            reload: {
+                                                icon: '<i class="fas fa-sync"></i>',
+                                                label: "Reload Now",
+                                                callback: () => window.location.reload()
+                                            },
+                                            later: {
+                                                icon: '<i class="fas fa-clock"></i>',
+                                                label: "Reload Later",
+                                                callback: () => ui.notifications.info("Remember to reload when convenient to see imported module sets.")
+                                            }
+                                        },
+                                        default: "reload"
+                                    });
+                                    reloadDialog.render(true);
                                 };
                                 reader.readAsText(file);
                             } catch (error) {
