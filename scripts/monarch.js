@@ -433,6 +433,143 @@ class CoffeePubMonarch {
             select.val('');
             html.find('.load-set-button').hide();
         });
+
+        // Export module sets
+        html.find('.export-module-sets').click(async (event) => {
+            event.preventDefault();
+            
+            const moduleSets = game.settings.get(this.ID, 'moduleSets');
+            const exportData = {
+                moduleSets,
+                exportedAt: new Date().toISOString(),
+                foundryVersion: game.version,
+                moduleVersion: game.modules.get(this.ID).version
+            };
+            
+            const filename = `foundry-module-sets-${new Date().toISOString().split('T')[0]}.json`;
+            const data = JSON.stringify(exportData, null, 2);
+            
+            // Use Foundry's built-in saveDataToFile
+            saveDataToFile(data, "text/json", filename);
+        });
+
+        // Import module sets
+        html.find('.import-module-sets').click(async (event) => {
+            event.preventDefault();
+
+            const content = `
+                <form>
+                    <div class="form-group">
+                        <label>Select a module sets file to import:</label>
+                        <div class="form-fields">
+                            <input type="file" accept=".json" required>
+                        </div>
+                    </div>
+                    <p class="notes">Warning: This will replace your current module sets.</p>
+                </form>`;
+
+            const dialog = new Dialog({
+                title: "Import Module Sets",
+                content: content,
+                buttons: {
+                    import: {
+                        icon: '<i class="fas fa-file-import"></i>',
+                        label: "Import",
+                        callback: async (html) => {
+                            const fileInput = html.find('input[type="file"]')[0];
+                            const file = fileInput.files[0];
+                            if (!file) return;
+
+                            try {
+                                const reader = new FileReader();
+                                reader.onload = async (e) => {
+                                    const importData = JSON.parse(e.target.result);
+                                    const importedSets = importData.moduleSets;
+
+                                    // Analyze differences
+                                    const allModules = new Set(game.modules.keys());
+                                    const importedModules = new Set();
+                                    Object.values(importedSets).forEach(moduleList => {
+                                        moduleList.forEach(moduleId => importedModules.add(moduleId));
+                                    });
+
+                                    const missingModules = [...importedModules].filter(id => !allModules.has(id));
+                                    const extraModules = [...allModules].filter(id => !importedModules.has(id));
+
+                                    // Save the imported sets
+                                    await game.settings.set(this.ID, 'moduleSets', importedSets);
+
+                                    // Show analysis dialog
+                                    const analysisContent = `
+                                        <h3>Import Analysis</h3>
+                                        <div class="form-group">
+                                            <label>Missing Modules (in sets but not installed):</label>
+                                            <div class="missing-modules">
+                                                ${missingModules.length ? missingModules.join('<br>') : 'None'}
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Extra Modules (installed but not in sets):</label>
+                                            <div class="extra-modules">
+                                                ${extraModules.length ? extraModules.join('<br>') : 'None'}
+                                            </div>
+                                        </div>`;
+
+                                    const analysisDialog = new Dialog({
+                                        title: "Import Analysis",
+                                        content: analysisContent,
+                                        buttons: {
+                                            save: {
+                                                icon: '<i class="fas fa-save"></i>',
+                                                label: "Save Analysis",
+                                                callback: () => {
+                                                    const analysisText = `
+Module Sets Import Analysis
+Date: ${new Date().toLocaleString()}
+
+Missing Modules (in sets but not installed):
+${missingModules.length ? missingModules.join('\n') : 'None'}
+
+Extra Modules (installed but not in sets):
+${extraModules.length ? extraModules.join('\n') : 'None'}`;
+
+                                                    const filename = `module-sets-analysis-${new Date().toISOString().split('T')[0]}.txt`;
+                                                    saveDataToFile(analysisText, "text/plain", filename);
+                                                }
+                                            },
+                                            close: {
+                                                icon: '<i class="fas fa-times"></i>',
+                                                label: "Close"
+                                            }
+                                        },
+                                        default: "close"
+                                    });
+                                    analysisDialog.render(true);
+
+                                    // Update the dropdown
+                                    const moduleSetSelect = html.closest('#module-management').find('.load-module-set');
+                                    const existingSets = Object.keys(importedSets);
+                                    moduleSetSelect.empty().append(`<option value="">-- Select a Module Set --</option>`);
+                                    existingSets.forEach(set => {
+                                        moduleSetSelect.append(`<option value="${set}">${set}</option>`);
+                                    });
+                                };
+                                reader.readAsText(file);
+                            } catch (error) {
+                                console.error("COFFEE-PUB-MONARCH | Error importing module sets:", error);
+                                ui.notifications.error("Failed to import module sets. Check the console for details.");
+                            }
+                        }
+                    },
+                    cancel: {
+                        icon: '<i class="fas fa-times"></i>',
+                        label: "Cancel"
+                    }
+                },
+                default: "import"
+            });
+            dialog.render(true);
+        });
     }
 }
 
