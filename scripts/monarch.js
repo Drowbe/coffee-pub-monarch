@@ -179,12 +179,11 @@ class CoffeePubMonarch {
         html.find('.save-new-module-set').click(async (event) => {
             event.preventDefault();
             
-            // Capture current module states
+            // Capture current module states from the form checkboxes
             const currentModules = [];
-            const moduleConfig = game.settings.get('core', 'moduleConfiguration') || {};
-            for (let [moduleId, isActive] of Object.entries(moduleConfig)) {
-                if (isActive) currentModules.push(moduleId);
-            }
+            html.find('input[type="checkbox"]').each(function() {
+                if (this.checked) currentModules.push(this.name);
+            });
             
             const content = `
                 <form>
@@ -268,12 +267,11 @@ class CoffeePubMonarch {
             const setName = html.find('.load-module-set').val();
             if (!setName) return;
 
-            // Capture current module states
+            // Capture current module states from the form checkboxes
             const currentModules = [];
-            const moduleConfig = game.settings.get('core', 'moduleConfiguration') || {};
-            for (let [moduleId, isActive] of Object.entries(moduleConfig)) {
-                if (isActive) currentModules.push(moduleId);
-            }
+            html.find('input[type="checkbox"]').each(function() {
+                if (this.checked) currentModules.push(this.name);
+            });
 
             const dialog = new Dialog({
                 title: game.i18n.localize(`${this.ID}.moduleSet.title`),
