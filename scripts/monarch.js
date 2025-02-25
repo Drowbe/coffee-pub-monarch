@@ -444,7 +444,10 @@ class CoffeePubMonarch {
                 moduleVersion: game.modules.get(this.ID).version
             };
             
-            const filename = `foundry-module-sets-${new Date().toISOString().split('T')[0]}.json`;
+            const now = new Date();
+            const date = now.toISOString().split('T')[0];
+            const time = `${now.getHours()}-${now.getMinutes()}`;
+            const filename = `monarch-${date}-${time}.json`;
             const data = JSON.stringify(exportData, null, 2);
             
             // Use Foundry's built-in saveDataToFile
@@ -459,7 +462,7 @@ class CoffeePubMonarch {
                 <form>
                     <h2 style="margin-bottom: 0.5em;">Import Module Sets</h2>
                     <div class="form-group">
-                        <label>Select a module sets file to import:</label>
+                        <label>Import JSON</label>
                         <div class="form-fields">
                             <input type="file" accept=".json" required>
                         </div>

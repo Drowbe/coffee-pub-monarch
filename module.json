@@ -2,7 +2,7 @@
   "id": "coffee-pub-monarch",
   "title": "Coffee Pub Monarch",
   "description": "Adds the ability to save and load sets of enabled modules in Foundry VTT.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "compatibility": {
     "minimum": "12",
     "verified": "12",
@@ -19,9 +19,6 @@
   ],
   "styles": [
     "styles/monarch.css"
-  ],
-  "templates": [
-    "templates/monarch-controls.hbs"
   ],
   "languages": [
     {
