@@ -167,33 +167,41 @@ new (class ImagePathReplacerApp extends Application {
           .image-replacer-left { flex: 1; }
           .image-replacer-right { flex: 1; border-left: 1px solid #999; padding-left: 1em; overflow-y: auto; background: #f9f9f9; font-size: 0.85em; }
           .two-column { columns: 2; -webkit-columns: 2; column-gap: 1em; }
-          .form-group { margin-bottom: 1em; }
-  .form-group label {
-    display: block;
-    margin-bottom: 0.25em;
-  }
-  
+          .form-group { margin-bottom: 1em; display: block; }
+          .form-group label {
+            display: block;
+            margin-bottom: 0.25em;
+          }
+          .image-replacer-left form {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 0.5em;
+          }
         </style>
         <div class="image-replacer-flex">
           <div class="image-replacer-left">
             <form>
+                <label for="oldPath">Old Path</label>
               <div class="form-group">
-                <label for="oldPath">Old Path</label><br/>
+                
                 <input type="text" name="oldPath" id="oldPath" placeholder="e.g. modules/assets" style="width:100%;" />
               </div>
+              <label for="newPath">New Path</label>
               <div class="form-group">
-                <label for="newPath">New Path</label><br/>
+                
                 <input type="text" name="newPath" id="newPath" placeholder="e.g. newplace/newfolder" style="width:100%;" />
               </div>
+              <label for="folderFilter">Folder Filter</label>
               <div class="form-group">
-                <label for="folderFilter">Folder Filter</label><br/>
+                
                 <select name="folderFilter" id="folderFilter" style="width:100%;">
                   <option value="">(All Folders)</option>
                   ${folders.map(f => `<option value="${f.id}">${f.name}</option>`).join("")}
                 </select>
               </div>
+              <label for="matchMode">Match Mode</label>
               <div class="form-group">
-                <label for="matchMode">Match Mode</label><br/>
+                
                 <select name="matchMode" id="matchMode" style="width:100%;">
                   <option value="all">All</option>
                   <option value="path">Path Only</option>
