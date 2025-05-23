@@ -291,6 +291,13 @@ new (class TextReplacerApp extends Application {
     if (!changes.length) return reportDiv.innerHTML += `<p><em>No matching paths found.</em></p>`;
 
     if (!doReplace) {
+      // Helper to bold the search string in a value
+      function boldSearch(str, search) {
+        if (!search) return str;
+        // Escape regex special chars in search
+        const esc = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return str.replace(new RegExp(esc, 'gi'), match => `<span style="font-weight:bold;color:#12409f">${match}</span>`);
+      }
       reportDiv.innerHTML += changes.map(c => {
         let title = c.name;
         // Build folder path for all document types
@@ -318,11 +325,11 @@ new (class TextReplacerApp extends Application {
             </div>
             <div class="replace-old">
               <span class="code-old-label">OLD</span>
-              <span class="code-old">${c.old}</span>
+              <span class="code-old">${boldSearch(c.old, oldPath)}</span>
             </div>
             <div class="replace-new">
               <span class="code-new-label">NEW</span>
-              <span class="code-new">${c.new}</span>
+              <span class="code-new">${boldSearch(c.new, newPath)}</span>
             </div>
           </div>`;
       }).join(" ");
