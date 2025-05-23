@@ -128,7 +128,18 @@ new (class ImagePathReplacerApp extends Application {
     }
 
     if (options["journals"]) {
-      for (const journal of game.journal.contents) {
+      let journalsToProcess = game.journal.contents;
+      if (folderFilter) {
+        const folder = game.folders.get(folderFilter);
+        if (folder) {
+          const gatherFolderIds = (f) => [f.id, ...(f.children ? f.children.flatMap(gatherFolderIds) : [])];
+          const allowedFolderIds = new Set(gatherFolderIds(folder));
+          journalsToProcess = journalsToProcess.filter(journal => journal.folder && allowedFolderIds.has(journal.folder.id));
+        } else {
+          journalsToProcess = [];
+        }
+      }
+      for (const journal of journalsToProcess) {
         for (const page of journal.pages.contents) {
           if (page.type === "image" && match(page.src)) {
             changes.push({ type: "journal-image", name: `${journal.name} → ${page.name}`, field: "src", old: page.src, new: page.src.replace(oldPath, newPath), id: journal.id, pageId: page.id, folder: journal.folder });
