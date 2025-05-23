@@ -93,10 +93,48 @@ new (class TextReplacerApp extends Application {
 
     const changes = [];
     const match = (value) => {
-      if (matchMode === "path") return value.split("/").slice(0, -1).join("/").startsWith(oldPath);
-      if (matchMode === "filename") return value.split("/").pop().startsWith(oldPath);
+      if (matchMode === "path") {
+        // Only match if value looks like a path: must contain at least one '/' and end in a valid extension
+        const pathRegex = /[\w\-./]+\.[a-zA-Z0-9]{1,4}/g;
+        return pathRegex.test(value) && value.includes(oldPath);
+      }
+      if (matchMode === "filename") {
+        // Only match if value contains a filename (no '/' in the match, ends in valid extension)
+        const filename = value.split("/").pop();
+        const lastDot = filename.lastIndexOf('.');
+        if (lastDot === -1) return false;
+        const base = filename.slice(0, lastDot);
+        const ext = filename.slice(lastDot + 1);
+        if (ext.length < 1 || ext.length > 4) return false;
+        return base.includes(oldPath);
+      }
       return value.includes(oldPath);
     };
+
+    // Helper for extracting the matched portion for report display
+    function getMatchedPortion(value, matchMode, oldPath) {
+      if (matchMode === "path") {
+        // Match only substrings that look like file paths
+        const pathRegex = /[\w\-./]+\.[a-zA-Z0-9]{1,4}/g;
+        const matches = value.match(pathRegex);
+        if (!matches) return null;
+        // Return the first match that contains oldPath
+        return matches.find(m => m.includes(oldPath)) || null;
+      }
+      if (matchMode === "filename") {
+        // Match only substrings that look like filenames (no '/' in the match, ends in valid extension)
+        const filenameRegex = /\b([\w\-\.]+)\.([a-zA-Z0-9]{1,4})\b/g;
+        let m;
+        while ((m = filenameRegex.exec(value)) !== null) {
+          const base = m[1];
+          const ext = m[2];
+          if (base.includes(oldPath)) return `${base}.${ext}`;
+        }
+        return null;
+      }
+      if (value.includes(oldPath)) return oldPath;
+      return null;
+    }
 
     // Collect for Images
     const collect = (collection, imgField, type, fieldTag) => {
@@ -125,7 +163,12 @@ new (class TextReplacerApp extends Application {
       for (const doc of docs) {
         const img = foundry.utils.getProperty(doc, imgField);
         if (typeof img === "string" && match(img)) {
-          changes.push({ type, name: doc.name, field: imgField, old: img, new: img.replaceAll(oldPath, newPath), id: doc.id, docClass: collection.documentClass, folder: doc.folder, fieldTag: "IMAGES" });
+          let oldVal = getMatchedPortion(img, matchMode, oldPath);
+          if (!oldVal) continue;
+          let newVal = (matchMode === "filename")
+            ? oldVal.replace(oldPath, newPath)
+            : img.replaceAll(oldPath, newPath);
+          changes.push({ type, name: doc.name, field: imgField, old: oldVal, new: newVal, id: doc.id, docClass: collection.documentClass, folder: doc.folder, fieldTag: "IMAGES" });
         }
       }
     };
@@ -151,7 +194,12 @@ new (class TextReplacerApp extends Application {
       for (const scene of scenesToProcess) {
         const bg = scene.background?.src;
         if (typeof bg === "string" && match(bg)) {
-          changes.push({ type: "scene", name: scene.name, field: "background.src", old: bg, new: bg.replaceAll(oldPath, newPath), id: scene.id, folder: scene.folder, fieldTag: "IMAGES" });
+          let oldVal = getMatchedPortion(bg, matchMode, oldPath);
+          if (!oldVal) continue;
+          let newVal = (matchMode === "filename")
+            ? oldVal.replace(oldPath, newPath)
+            : bg.replaceAll(oldPath, newPath);
+          changes.push({ type: "scene", name: scene.name, field: "background.src", old: oldVal, new: newVal, id: scene.id, folder: scene.folder, fieldTag: "IMAGES" });
         }
       }
     }
@@ -172,12 +220,41 @@ new (class TextReplacerApp extends Application {
       for (const journal of journalsToProcess) {
         for (const page of journal.pages.contents) {
           if (page.type === "image" && targetImages && match(page.src)) {
-            changes.push({ type: "journal-image", name: `${journal.name} → ${page.name}`, field: "src", old: page.src, new: page.src.replaceAll(oldPath, newPath), id: journal.id, pageId: page.id, folder: journal.folder, fieldTag: "IMAGES" });
+            let oldVal = getMatchedPortion(page.src, matchMode, oldPath);
+            if (!oldVal) continue;
+            let newVal = (matchMode === "filename")
+              ? oldVal.replace(oldPath, newPath)
+              : page.src.replaceAll(oldPath, newPath);
+            changes.push({ type: "journal-image", name: `${journal.name} → ${page.name}`, field: "src", old: oldVal, new: newVal, id: journal.id, pageId: page.id, folder: journal.folder, fieldTag: "IMAGES" });
           }
           if (page.type === "text" && targetText && page.text?.content?.includes(oldPath)) {
-            const matches = [...page.text.content.matchAll(new RegExp(`${oldPath}[^"'\\s]*`, "g"))];
-            for (const match of matches) {
-              changes.push({ type: "journal-text", name: `${journal.name} → ${page.name}`, field: "text.content", old: match[0], new: match[0].replaceAll(oldPath, newPath), id: journal.id, pageId: page.id, fullText: page.text.content, folder: journal.folder, fieldTag: "TEXT" });
+            let matches = [];
+            if (matchMode === "filename") {
+              // Find all filenames with ext 1-4 chars, base contains oldPath, no '/'
+              const filenameRegex = /\b([\w\-\.]+)\.([a-zA-Z0-9]{1,4})\b/g;
+              let m;
+              while ((m = filenameRegex.exec(page.text.content)) !== null) {
+                const base = m[1];
+                const ext = m[2];
+                if (base.includes(oldPath)) matches.push(`${base}.${ext}`);
+              }
+            } else if (matchMode === "path") {
+              // Find all path-like substrings containing oldPath
+              const pathRegex = /[\w\-./]+\.[a-zA-Z0-9]{1,4}/g;
+              let m;
+              while ((m = pathRegex.exec(page.text.content)) !== null) {
+                if (m[0].includes(oldPath)) matches.push(m[0]);
+              }
+            } else {
+              const regex = new RegExp(`${oldPath}`, "g");
+              let m;
+              while ((m = regex.exec(page.text.content)) !== null) {
+                matches.push(oldPath);
+              }
+            }
+            for (const matchText of matches) {
+              let newVal = matchText.replace(oldPath, newPath);
+              changes.push({ type: "journal-text", name: `${journal.name} → ${page.name}`, field: "text.content", old: matchText, new: newVal, id: journal.id, pageId: page.id, fullText: page.text.content, folder: journal.folder, fieldTag: "TEXT" });
             }
           }
         }
@@ -200,7 +277,12 @@ new (class TextReplacerApp extends Application {
       for (const playlist of playlistsToProcess) {
         for (const sound of playlist.sounds.contents) {
           if (typeof sound.path === "string" && match(sound.path)) {
-            changes.push({ type: "playlists", name: `${playlist.name} → ${sound.name}`, field: "path", old: sound.path, new: sound.path.replaceAll(oldPath, newPath), id: playlist.id, soundId: sound.id, folder: playlist.folder, fieldTag: "AUDIO" });
+            let oldVal = getMatchedPortion(sound.path, matchMode, oldPath);
+            if (!oldVal) continue;
+            let newVal = (matchMode === "filename")
+              ? oldVal.replace(oldPath, newPath)
+              : sound.path.replaceAll(oldPath, newPath);
+            changes.push({ type: "playlists", name: `${playlist.name} → ${sound.name}`, field: "path", old: oldVal, new: newVal, id: playlist.id, soundId: sound.id, folder: playlist.folder, fieldTag: "AUDIO" });
           }
         }
       }
