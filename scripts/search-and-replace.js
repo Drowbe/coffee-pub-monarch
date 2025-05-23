@@ -84,6 +84,13 @@ new (class TextReplacerApp extends Application {
       playlists: html.find('[name="updatePlaylists"]')[0].checked
     };
 
+    // Warn if no document type is selected
+    if (!options.actors && !options.items && !options.scenes && !options.journals && !options.tables && !options.playlists) {
+      ui.notifications.warn("Please select at least one document type (Actors, Items, Scenes, Journals, Roll Tables, or Playlists).", {permanent: false});
+      reportDiv.innerHTML = `<p style='color:darkred;'><strong>Warning:</strong> Please select at least one document type (Actors, Items, Scenes, Journals, Roll Tables, or Playlists).</p>`;
+      return;
+    }
+
     const changes = [];
     const match = (value) => {
       if (matchMode === "path") return value.split("/").slice(0, -1).join("/").startsWith(oldPath);
@@ -320,29 +327,161 @@ new (class TextReplacerApp extends Application {
     }
     return $(
       `<style>
-      .text-replacer-flex { display: flex; gap: 1em; min-width: 800px; align-items: flex-start; overflow: hidden; }
-      .text-replacer-left { flex: 1; max-width: 350px; min-width: 350px; }
-      .text-replacer-right { flex: 1; border: 1px solid #999; padding: 1.0em; overflow-y: auto; background: #f9f9f9; min-width: 400px; max-height: 1000px; height: 100%; border-radius: 4px; }
-      .text-replacer-right p { font-size: 1.2em; margin-top: 0.0em; margin-bottom: 1.0em; text-transform: uppercase; }
-      .two-column { columns: 2; -webkit-columns: 2; column-gap: 1em; }
-      .form-group { margin-bottom: 1em; display: block; }
-      .button-report, .button-search { background-color: rgb(34, 86, 39); color: #ffffff; border: none; padding: 5px 10px; border-radius: 5px; }
-      .button-replace { background-color: rgb(87, 44, 53); color: #ffffff; border: none; padding: 5px 10px; border-radius: 5px; }
-      .form-group label { display: block; margin-bottom: 0.25em; }
-      .text-replacer-left form { display: flex !important; flex-direction: column !important; gap: 0.5em; }
-      .replace-result { border-bottom: 1px dotted #000000; margin-top: 5px; margin-bottom: 15px; padding-bottom: 15px; }
-      .replace-new, .replace-old { font-size: 1.0em; margin-top: 5px; margin-bottom: 5px; font-size: 1.1em; }
-      .replace-result-title { border: 0px dotted #000000; border-radius: 3px; background-color: rgb(228, 222, 216); padding-top: 4px; padding-bottom: 4px; padding-left: 5px; padding-right: 5px; display: flex; align-items: center; }
-      .replace-title { border: 0px dotted #000000; display: inline-block; font-size: 1.2em; font-weight: 900; padding-top: 0px; padding-bottom: 0px; padding-left: 0px; padding-right: 0px; cursor: pointer; margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 8px; text-transform: uppercase; }
-      .replace-title:hover { color: #12409f; }
-      .replace-result-tag { display: inline-block; color: rgb(255, 255, 255); background-color: rgb(159, 63, 18); padding-top: 3px; padding-bottom: 2px; padding-left: 5px; padding-right: 5px; border-radius: 3px; font-size: 0.8em; text-transform: uppercase; margin-right: 5px; }
-      .replace-field-tag { display: inline-block; color: #fff; background-color: #3a6ea5; padding: 3px 5px 2px 5px; border-radius: 3px; font-size: 0.8em; text-transform: uppercase; margin-right: 0px; }
-      .code-old-label, .code-new-label { padding-top: 1px; padding-bottom: 1px; padding-left: 5px; padding-right: 5px; margin-right: 5px; font-weight: 900; display: inline-block; width: 40px; text-align: right; background-color: #dedbd2; border-radius: 3px; }
-      .code-new-label { color: #060; }
-      .code-old-label { color: #600; } 
-      .code-new { color: #060; }
-      .code-old { color: #600; } 
-      </style>
+.text-replacer-flex {
+  display: flex;
+  gap: 1em;
+  min-width: 800px;
+  align-items: flex-start;
+  overflow: hidden;
+}
+.text-replacer-left {
+  flex: 1;
+  max-width: 350px;
+  min-width: 350px;
+}
+.text-replacer-right {
+  flex: 1;
+  border: 1px solid #999;
+  padding: 1.0em;
+  overflow-y: auto;
+  background: #f9f9f9;
+  min-width: 400px;
+  max-height: 1000px;
+  height: 100%;
+  border-radius: 4px;
+}
+.text-replacer-right p {
+  font-size: 1.2em;
+  margin-top: 0.0em;
+  margin-bottom: 1.0em;
+  text-transform: uppercase;
+}
+.two-column {
+  columns: 2;
+  -webkit-columns: 2;
+  column-gap: 1em;
+}
+.form-group {
+  margin-bottom: 1em;
+  display: block;
+}
+.button-report,
+.button-search {
+  background-color: rgb(34, 86, 39);
+  color: #ffffff;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 5px;
+}
+.button-replace {
+  background-color: rgb(87, 44, 53);
+  color: #ffffff;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 5px;
+}
+.form-group label {
+  display: block;
+  margin-bottom: 0.25em;
+}
+.text-replacer-left form {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.5em;
+}
+.replace-result {
+  border-bottom: 1px dotted #000000;
+  margin-top: 5px;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+}
+.replace-new,
+.replace-old {
+  font-size: 1.0em;
+  margin-top: 5px;
+  margin-bottom: 5px;
+  font-size: 1.1em;
+}
+.replace-result-title {
+  border: 0px dotted #000000;
+  border-radius: 3px;
+  background-color: rgb(228, 222, 216);
+  padding-top: 4px;
+  padding-bottom: 4px;
+  padding-left: 5px;
+  padding-right: 5px;
+  display: flex;
+  align-items: center;
+}
+.replace-title {
+  border: 0px dotted #000000;
+  display: inline-block;
+  font-size: 1.2em;
+  font-weight: 900;
+  padding-top: 0px;
+  padding-bottom: 0px;
+  padding-left: 0px;
+  padding-right: 0px;
+  cursor: pointer;
+  margin-top: 0px;
+  margin-bottom: 0px;
+  margin-left: 0px;
+  margin-right: 8px;
+  text-transform: uppercase;
+}
+.replace-title:hover {
+  color: #12409f;
+}
+.replace-result-tag {
+  display: inline-block;
+  color: rgb(255, 255, 255);
+  background-color: rgb(159, 63, 18);
+  padding-top: 3px;
+  padding-bottom: 2px;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-radius: 3px;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  margin-right: 5px;
+}
+.replace-field-tag {
+  display: inline-block;
+  color: #fff;
+  background-color: #3a6ea5;
+  padding: 3px 5px 2px 5px;
+  border-radius: 3px;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  margin-right: 0px;
+}
+.code-old-label,
+.code-new-label {
+  padding-top: 1px;
+  padding-bottom: 1px;
+  padding-left: 5px;
+  padding-right: 5px;
+  margin-right: 5px;
+  font-weight: 900;
+  display: inline-block;
+  width: 40px;
+  text-align: right;
+  background-color: #dedbd2;
+  border-radius: 3px;
+}
+.code-new-label {
+  color: #060;
+}
+.code-old-label {
+  color: #600;
+}
+.code-new {
+  color: #060;
+}
+.code-old {
+  color: #600;
+}
+</style>
       <div class="text-replacer-flex">
         <div class="text-replacer-left">
           <form>
