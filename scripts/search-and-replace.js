@@ -85,12 +85,30 @@ new (class ImagePathReplacerApp extends Application {
       let docs = collection.contents;
       if (folderFilter) {
         const folder = game.folders.get(folderFilter);
-        docs = this._getAllFolderContents(folder);
+        if (folder) {
+          // Gather all folder IDs: selected folder and all subfolders
+          const gatherFolderIds = (f) => [f.id, ...(f.children ? f.children.flatMap(gatherFolderIds) : [])];
+          const allowedFolderIds = new Set(gatherFolderIds(folder));
+          docs = docs.filter(doc => doc.folder && allowedFolderIds.has(doc.folder.id));
+        } else {
+          return;
+        }
       }
+      // Filter by document type
+      const typeMap = {
+        actors: "Actor",
+        items: "Item",
+        journals: "JournalEntry",
+        tables: "RollTable",
+        playlists: "Playlist",
+        scenes: "Scene"
+      };
+      const expectedType = typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1, -1);
+      docs = docs.filter(doc => doc.documentName === expectedType);
       for (const doc of docs) {
-        const img = getProperty(doc, imgField);
+        const img = foundry.utils.getProperty(doc, imgField);
         if (typeof img === "string" && match(img)) {
-          changes.push({ type, name: doc.name, field: imgField, old: img, new: img.replace(oldPath, newPath), id: doc.id, docClass: collection.documentClass });
+          changes.push({ type, name: doc.name, field: imgField, old: img, new: img.replace(oldPath, newPath), id: doc.id, docClass: collection.documentClass, folder: doc.folder });
         }
       }
     };
@@ -113,12 +131,12 @@ new (class ImagePathReplacerApp extends Application {
       for (const journal of game.journal.contents) {
         for (const page of journal.pages.contents) {
           if (page.type === "image" && match(page.src)) {
-            changes.push({ type: "journal-image", name: `${journal.name} → ${page.name}`, field: "src", old: page.src, new: page.src.replace(oldPath, newPath), id: journal.id, pageId: page.id });
+            changes.push({ type: "journal-image", name: `${journal.name} → ${page.name}`, field: "src", old: page.src, new: page.src.replace(oldPath, newPath), id: journal.id, pageId: page.id, folder: journal.folder });
           }
           if (page.type === "text" && page.text?.content?.includes(oldPath)) {
             const matches = [...page.text.content.matchAll(new RegExp(`${oldPath}[^"'\\s]*`, "g"))];
             for (const match of matches) {
-              changes.push({ type: "journal-text", name: `${journal.name} → ${page.name}`, field: "text.content", old: match[0], new: match[0].replace(oldPath, newPath), id: journal.id, pageId: page.id, fullText: page.text.content });
+              changes.push({ type: "journal-text", name: `${journal.name} → ${page.name}`, field: "text.content", old: match[0], new: match[0].replace(oldPath, newPath), id: journal.id, pageId: page.id, fullText: page.text.content, folder: journal.folder });
             }
           }
         }
@@ -128,21 +146,43 @@ new (class ImagePathReplacerApp extends Application {
     if (!changes.length) return reportDiv.innerHTML += `<p><em>No matching paths found.</em></p>`;
 
     if (!doReplace) {
-      reportDiv.innerHTML += changes.map(c => `
-        <div class="replace-result">
-          <div class="replace-result-title">
-            <div class="replace-title" data-type="${c.type}" data-id="${c.id}"${c.pageId ? ` data-page-id="${c.pageId}"` : ''}>${c.name}</div>
-            <div class="replace-result-tag">${c.type}</div>
-          </div>
-          <div class="replace-old">
-            <span class="code-old-label">OLD</span>
-            <span class="code-old">${c.old}</span>
-          </div>
-        <div class="replace-new">
-          <span class="code-new-label">NEW</span>
-          <span class="code-new">${c.new}</span>
-        </div>
-      </div>`).join(" ");
+      reportDiv.innerHTML += changes.map(c => {
+        let title = c.name;
+        // Build folder path for all document types
+        let folderPath = [];
+        let folder = c.folder;
+        while (folder) {
+          folderPath.unshift(folder.name);
+          folder = folder.parent;
+        }
+        if (c.type === "journal-image" || c.type === "journal-text") {
+          // For journal pages, prepend folder path to journal name and page name
+          if (folderPath.length) {
+            // c.name is "Journal Name → Page Name"
+            title = folderPath.join(' → ') + ' → ' + c.name;
+          }
+        } else {
+          // For other types, prepend folder path to doc name
+          if (folderPath.length) {
+            title = folderPath.join(' → ') + ' → ' + c.name;
+          }
+        }
+        return `
+          <div class="replace-result">
+            <div class="replace-result-title">
+              <div class="replace-title" data-type="${c.type}" data-id="${c.id}"${c.pageId ? ` data-page-id="${c.pageId}"` : ''}>${title}</div>
+              <div class="replace-result-tag">${c.type}</div>
+            </div>
+            <div class="replace-old">
+              <span class="code-old-label">OLD</span>
+              <span class="code-old">${c.old}</span>
+            </div>
+            <div class="replace-new">
+              <span class="code-new-label">NEW</span>
+              <span class="code-new">${c.new}</span>
+            </div>
+          </div>`;
+      }).join(" ");
       setTimeout(() => {
         reportDiv.querySelectorAll('.replace-title').forEach(el => {
           el.addEventListener('click', function() {
