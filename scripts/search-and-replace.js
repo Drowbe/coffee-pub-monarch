@@ -119,10 +119,21 @@ new (class ImagePathReplacerApp extends Application {
     collect(game.playlists, "img", "playlists");
 
     if (options["scenes"]) {
-      for (const scene of game.scenes.contents) {
+      let scenesToProcess = game.scenes.contents;
+      if (folderFilter) {
+        const folder = game.folders.get(folderFilter);
+        if (folder && folder.type === "Scene") {
+          const gatherFolderIds = (f) => [f.id, ...(f.children ? f.children.flatMap(gatherFolderIds) : [])];
+          const allowedFolderIds = new Set(gatherFolderIds(folder));
+          scenesToProcess = scenesToProcess.filter(scene => scene.folder && allowedFolderIds.has(scene.folder.id));
+        } else {
+          scenesToProcess = [];
+        }
+      }
+      for (const scene of scenesToProcess) {
         const bg = scene.background?.src;
         if (typeof bg === "string" && match(bg)) {
-          changes.push({ type: "scene", name: scene.name, field: "background.src", old: bg, new: bg.replace(oldPath, newPath), id: scene.id });
+          changes.push({ type: "scene", name: scene.name, field: "background.src", old: bg, new: bg.replace(oldPath, newPath), id: scene.id, folder: scene.folder });
         }
       }
     }
