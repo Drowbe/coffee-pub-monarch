@@ -306,106 +306,90 @@ new (class TextReplacerApp extends Application {
     if (!changes.length) return reportDiv.innerHTML += `<p><em>No matching paths found.</em></p>`;
 
     if (!doReplace) {
-      // Helper to bold the search string in a value
-      function boldSearch(str, search) {
-        if (!search) return str;
-        const esc = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        return str.replace(new RegExp(esc, 'gi'), match => `<span style="font-weight:bold;color:#12409f">${match}</span>`);
+      reportDiv.innerHTML += renderResults(changes, matchMode, oldPath, newPath, '');
+      setTimeout(() => {
+        reportDiv.querySelectorAll('.replace-title').forEach(el => {
+          el.addEventListener('click', function() {
+            const type = this.getAttribute('data-type');
+            const id = this.getAttribute('data-id');
+            const pageId = this.getAttribute('data-page-id');
+            const soundId = this.getAttribute('data-sound-id');
+            if (type === 'actors') game.actors.get(id)?.sheet.render(true);
+            else if (type === 'items') game.items.get(id)?.sheet.render(true);
+            else if (type === 'scene') game.scenes.get(id)?.sheet.render(true);
+            else if (type === 'journals' || type === 'journal-image' || type === 'journal-text') {
+              const journal = game.journal.get(id);
+              if (journal && pageId) {
+                const page = journal.pages.get(pageId);
+                if (page) journal.sheet.render(true, { pageId: page.id });
+                else journal.sheet.render(true);
+              } else if (journal) {
+                journal.sheet.render(true);
+              }
+            }
+            else if (type === 'tables') game.tables.get(id)?.sheet.render(true);
+            else if (type === 'playlists') game.playlists.get(id)?.sheet.render(true);
+          });
+        });
+      }, 0);
+      return;
+    } else {
+      // Mass replace: show results like the report, but with a different lead line and count
+      // Actually perform the replacements in Foundry documents
+      for (const c of changes) {
+        try {
+          if (c.type === 'actors') {
+            const doc = game.actors.get(c.id);
+            if (doc) await doc.update({ [c.field]: c.new });
+          } else if (c.type === 'items') {
+            const doc = game.items.get(c.id);
+            if (doc) await doc.update({ [c.field]: c.new });
+          } else if (c.type === 'scene') {
+            const doc = game.scenes.get(c.id);
+            if (doc && c.field === 'background.src') {
+              await doc.update({ 'background.src': c.new });
+            }
+          } else if (c.type === 'tables') {
+            const doc = game.tables.get(c.id);
+            if (doc) await doc.update({ [c.field]: c.new });
+          } else if (c.type === 'playlists') {
+            // If soundId is present, update the sound path
+            const doc = game.playlists.get(c.id);
+            if (doc && c.soundId) {
+              const sound = doc.sounds.get(c.soundId);
+              if (sound) await sound.update({ path: c.new });
+            } else if (doc) {
+              await doc.update({ [c.field]: c.new });
+            }
+          } else if (c.type === 'journal-image') {
+            // Update the image page src
+            const journal = game.journal.get(c.id);
+            if (journal && c.pageId) {
+              const page = journal.pages.get(c.pageId);
+              if (page) await page.update({ src: c.new });
+            }
+          } else if (c.type === 'journal-text') {
+            // Update the text page content
+            const journal = game.journal.get(c.id);
+            if (journal && c.pageId) {
+              const page = journal.pages.get(c.pageId);
+              if (page) {
+                // Replace only the first occurrence of c.old in the fullText with c.new
+                let content = c.fullText;
+                // Use a regex to replace only the first occurrence, case-insensitive
+                const esc = c.old.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp(esc, 'i');
+                content = content.replace(regex, c.new);
+                await page.update({ 'text.content': content });
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[TextReplacer] Error updating document:', c, err);
+        }
       }
-      // Helper to add context for all text mode (multiple matches, full sentence/line, and correct new context)
-      function allContextsWithBold(str, search, replace) {
-        if (!search) return [{old: str, new: str}];
-        // Strip HTML tags for context extraction
-        const plain = str.replace(/<[^>]+>/g, '');
-        const esc = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(esc, 'gi');
-        let result = [];
-        let m;
-        while ((m = regex.exec(plain)) !== null) {
-          // Find sentence boundaries
-          let start = plain.lastIndexOf('.', m.index);
-          let excl = plain.lastIndexOf('!', m.index);
-          let quest = plain.lastIndexOf('?', m.index);
-          let br = plain.lastIndexOf('\n', m.index);
-          start = Math.max(start, excl, quest, br);
-          start = start === -1 ? 0 : start + 1;
-          let endDot = plain.indexOf('.', m.index + search.length);
-          let endExcl = plain.indexOf('!', m.index + search.length);
-          let endQuest = plain.indexOf('?', m.index + search.length);
-          let endBr = plain.indexOf('\n', m.index + search.length);
-          let ends = [endDot, endExcl, endQuest, endBr].filter(e => e !== -1);
-          let end = ends.length ? Math.min(...ends) : plain.length;
-          if (end === plain.length && plain.indexOf('\n', m.index + search.length) !== -1) {
-            end = plain.indexOf('\n', m.index + search.length);
-          }
-          let context = plain.slice(start, end).trim();
-          // For old: bold the matched search term
-          let oldContext = context.replace(new RegExp(esc, 'gi'), mm => `<span style=\"font-weight:bold;color:#12409f\">${mm}</span>`);
-          // For new: replace only the matched occurrence in this context, bold the replacement
-          let relIndex = m.index - start;
-          let before = context.slice(0, relIndex);
-          let after = context.slice(relIndex + search.length);
-          let newContext = before + `<span style=\"font-weight:bold;color:#12409f\">${replace}</span>` + after;
-          result.push({old: oldContext, new: newContext});
-        }
-        return result.length ? result : [{old: plain, new: plain}];
-      }
-      reportDiv.innerHTML += changes.map(c => {
-        let title = c.name;
-        let folderPath = [];
-        let folder = c.folder;
-        while (folder) {
-          folderPath.unshift(folder.name);
-          folder = folder.parent;
-        }
-        if (c.type === "journal-image" || c.type === "journal-text") {
-          if (folderPath.length) {
-            title = folderPath.join(' → ') + ' → ' + c.name;
-          }
-        } else {
-          if (folderPath.length) {
-            title = folderPath.join(' → ') + ' → ' + c.name;
-          }
-        }
-        let isTextField = c.type === 'journal-text';
-        if (matchMode === 'all' && isTextField) {
-          // Show all matches with context for text fields, with correct new context
-          const contexts = allContextsWithBold(c.fullText || c.old, oldPath, newPath);
-          return contexts.map(ctx => `
-            <div class=\"replace-result\">
-              <div class=\"replace-result-title\">
-                <div class=\"replace-title\" data-type=\"${c.type}\" data-id=\"${c.id}\"${c.pageId ? ` data-page-id=\"${c.pageId}\"` : ''}${c.soundId ? ` data-sound-id=\"${c.soundId}\"` : ''}>${title}</div>
-                <div class=\"replace-result-tag\">${c.type}</div><div class=\"replace-field-tag\">${c.fieldTag}</div>
-              </div>
-              <div class=\"replace-old\">
-                <span class=\"code-old-label\">OLD</span>
-                <span class=\"code-old\">${ctx.old}</span>
-              </div>
-              <div class=\"replace-new\">
-                <span class=\"code-new-label\">NEW</span>
-                <span class=\"code-new\">${ctx.new}</span>
-              </div>
-            </div>`).join('');
-        } else {
-          let oldDisplay = boldSearch(c.old, oldPath);
-          let newDisplay = boldSearch(c.new, newPath);
-          return `
-            <div class=\"replace-result\">
-              <div class=\"replace-result-title\">
-                <div class=\"replace-title\" data-type=\"${c.type}\" data-id=\"${c.id}\"${c.pageId ? ` data-page-id=\"${c.pageId}\"` : ''}${c.soundId ? ` data-sound-id=\"${c.soundId}\"` : ''}>${title}</div>
-                <div class=\"replace-result-tag\">${c.type}</div><div class=\"replace-field-tag\">${c.fieldTag}</div>
-              </div>
-              <div class=\"replace-old\">
-                <span class=\"code-old-label\">OLD</span>
-                <span class=\"code-old\">${oldDisplay}</span>
-              </div>
-              <div class=\"replace-new\">
-                <span class=\"code-new-label\">NEW</span>
-                <span class=\"code-new\">${newDisplay}</span>
-              </div>
-            </div>`;
-        }
-      }).join("");
+      const leadLine = `<p><strong style='color:darkgreen;'>Success!</strong> ${changes.length} references updated.</p>`;
+      reportDiv.innerHTML = renderResults(changes, matchMode, oldPath, newPath, leadLine);
       setTimeout(() => {
         reportDiv.querySelectorAll('.replace-title').forEach(el => {
           el.addEventListener('click', function() {
@@ -433,32 +417,6 @@ new (class TextReplacerApp extends Application {
       }, 0);
       return;
     }
-
-    const grouped = this._groupBy(changes, c => c.type);
-    for (const [type, group] of Object.entries(grouped)) {
-      if (type.startsWith("journal")) {
-        const byJournal = this._groupBy(group, c => c.id);
-        for (const [jid, entries] of Object.entries(byJournal)) {
-          const journal = game.journal.get(jid);
-          const pageMap = {};
-          for (const entry of entries) {
-            if (!pageMap[entry.pageId]) pageMap[entry.pageId] = { _id: entry.pageId };
-            if (entry.type === "journal-image") pageMap[entry.pageId].src = entry.new;
-            if (entry.type === "journal-text") pageMap[entry.pageId].text = { content: entry.fullText.replaceAll(entry.old, entry.new) };
-            log(`📝 ${entry.name}<br/><code style="color: #600;">OLD</code><code style="color: #600;">${entry.old}</code><br/><code style="color: #060;">NEW</code><code style="color: #060;">${entry.new}</code>`);
-          }
-          await journal.update({ pages: Object.values(pageMap) });
-        }
-      } else if (type === "scene") {
-        await Scene.updateDocuments(group.map(c => (log(`🗺️ ${c.name}<br/><code class="code-old">OLD: ${c.old}</code><br/><code class="code-new">NEW: ${c.new}</code>`), { _id: c.id, background: { src: c.new } })));
-      } else {
-        const docClass = group[0].docClass;
-        await docClass.updateDocuments(group.map(c => (log(`📦 ${c.name}<br/><code class="code-old">OLD: ${c.old}</code><br/><code class="code-new">NEW: ${c.new}</code>`), { _id: c.id, [c.field]: c.new })));
-      }
-    }
-
-    ui.notifications.info(`✅ Replaced ${changes.length} image paths.`);
-    log(`<p><strong style='color:darkgreen;'>Success!</strong> ${changes.length} references updated.</p>`);
   }
 
   async _renderInner(data) {
@@ -714,3 +672,108 @@ new (class TextReplacerApp extends Application {
     );
   }
 })().render(true);
+
+// Helper to bold the search string in a value
+function boldSearch(str, search) {
+  if (!search) return str;
+  const esc = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return str.replace(new RegExp(esc, 'gi'), match => `<span style=\"font-weight:bold;color:#12409f\">${match}</span>`);
+}
+// Helper to add context for all text mode (multiple matches, full sentence/line, and correct new context)
+function allContextsWithBold(str, search, replace) {
+  if (!search) return [{old: str, new: str}];
+  // Strip HTML tags for context extraction
+  const plain = str.replace(/<[^>]+>/g, '');
+  const esc = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(esc, 'gi');
+  let result = [];
+  let m;
+  while ((m = regex.exec(plain)) !== null) {
+    // Find sentence boundaries
+    let start = plain.lastIndexOf('.', m.index);
+    let excl = plain.lastIndexOf('!', m.index);
+    let quest = plain.lastIndexOf('?', m.index);
+    let br = plain.lastIndexOf('\n', m.index);
+    start = Math.max(start, excl, quest, br);
+    start = start === -1 ? 0 : start + 1;
+    let endDot = plain.indexOf('.', m.index + search.length);
+    let endExcl = plain.indexOf('!', m.index + search.length);
+    let endQuest = plain.indexOf('?', m.index + search.length);
+    let endBr = plain.indexOf('\n', m.index + search.length);
+    let ends = [endDot, endExcl, endQuest, endBr].filter(e => e !== -1);
+    let end = ends.length ? Math.min(...ends) : plain.length;
+    if (end === plain.length && plain.indexOf('\n', m.index + search.length) !== -1) {
+      end = plain.indexOf('\n', m.index + search.length);
+    }
+    let context = plain.slice(start, end).trim();
+    // For old: bold the matched search term
+    let oldContext = context.replace(new RegExp(esc, 'gi'), mm => `<span style=\"font-weight:bold;color:#12409f\">${mm}</span>`);
+    // For new: replace only the matched occurrence in this context, bold the replacement
+    let relIndex = m.index - start;
+    let before = context.slice(0, relIndex);
+    let after = context.slice(relIndex + search.length);
+    let newContext = before + `<span style=\"font-weight:bold;color:#12409f\">${replace}</span>` + after;
+    result.push({old: oldContext, new: newContext});
+  }
+  return result.length ? result : [{old: plain, new: plain}];
+}
+function renderResults(changes, matchMode, oldPath, newPath, leadLine) {
+  let html = leadLine;
+  html += changes.map(c => {
+    let title = c.name;
+    let folderPath = [];
+    let folder = c.folder;
+    while (folder) {
+      folderPath.unshift(folder.name);
+      folder = folder.parent;
+    }
+    if (c.type === "journal-image" || c.type === "journal-text") {
+      if (folderPath.length) {
+        title = folderPath.join(' → ') + ' → ' + c.name;
+      }
+    } else {
+      if (folderPath.length) {
+        title = folderPath.join(' → ') + ' → ' + c.name;
+      }
+    }
+    let isTextField = c.type === 'journal-text';
+    if (matchMode === 'all' && isTextField) {
+      // Show all matches with context for text fields, with correct new context
+      const contexts = allContextsWithBold(c.fullText || c.old, oldPath, newPath);
+      return contexts.map(ctx => `
+        <div class=\"replace-result\">
+          <div class=\"replace-result-title\">
+            <div class=\"replace-title\" data-type=\"${c.type}\" data-id=\"${c.id}\"${c.pageId ? ` data-page-id=\"${c.pageId}\"` : ''}${c.soundId ? ` data-sound-id=\"${c.soundId}\"` : ''}>${title}</div>
+            <div class=\"replace-result-tag\">${c.type}</div><div class=\"replace-field-tag\">${c.fieldTag}</div>
+          </div>
+          <div class=\"replace-old\">
+            <span class=\"code-old-label\">OLD</span>
+            <span class=\"code-old\">${ctx.old}</span>
+          </div>
+          <div class=\"replace-new\">
+            <span class=\"code-new-label\">NEW</span>
+            <span class=\"code-new\">${ctx.new}</span>
+          </div>
+        </div>`).join('');
+    } else {
+      let oldDisplay = boldSearch(c.old, oldPath);
+      let newDisplay = boldSearch(c.new, newPath);
+      return `
+        <div class=\"replace-result\">
+          <div class=\"replace-result-title\">
+            <div class=\"replace-title\" data-type=\"${c.type}\" data-id=\"${c.id}\"${c.pageId ? ` data-page-id=\"${c.pageId}\"` : ''}${c.soundId ? ` data-sound-id=\"${c.soundId}\"` : ''}>${title}</div>
+            <div class=\"replace-result-tag\">${c.type}</div><div class=\"replace-field-tag\">${c.fieldTag}</div>
+          </div>
+          <div class=\"replace-old\">
+            <span class=\"code-old-label\">OLD</span>
+            <span class=\"code-old\">${oldDisplay}</span>
+          </div>
+          <div class=\"replace-new\">
+            <span class=\"code-new-label\">NEW</span>
+            <span class=\"code-new\">${newDisplay}</span>
+          </div>
+        </div>`;
+    }
+  }).join("");
+  return html;
+}
