@@ -230,7 +230,6 @@ new (class TextReplacerApp extends Application {
           if (page.type === "text" && targetText && page.text?.content?.includes(oldPath)) {
             let matches = [];
             if (matchMode === "filename") {
-              // Find all filenames with ext 1-4 chars, base contains oldPath, no '/'
               const filenameRegex = /\b([\w\-\.]+)\.([a-zA-Z0-9]{1,4})\b/g;
               let m;
               while ((m = filenameRegex.exec(page.text.content)) !== null) {
@@ -239,7 +238,6 @@ new (class TextReplacerApp extends Application {
                 if (base.includes(oldPath)) matches.push(`${base}.${ext}`);
               }
             } else if (matchMode === "path") {
-              // Find all path-like substrings containing oldPath
               const pathRegex = /[\w\-./]+\.[a-zA-Z0-9]{1,4}/g;
               let m;
               while ((m = pathRegex.exec(page.text.content)) !== null) {
@@ -252,6 +250,11 @@ new (class TextReplacerApp extends Application {
                 matches.push(oldPath);
               }
             }
+            // LOG: fullText and matches
+            console.log('[TextReplacer] Adding journal-text change:', {
+              fullText: page.text.content,
+              matches
+            });
             for (const matchText of matches) {
               let newVal = matchText.replace(oldPath, newPath);
               changes.push({ type: "journal-text", name: `${journal.name} → ${page.name}`, field: "text.content", old: matchText, new: newVal, id: journal.id, pageId: page.id, fullText: page.text.content, folder: journal.folder, fieldTag: "TEXT" });
@@ -294,13 +297,46 @@ new (class TextReplacerApp extends Application {
       // Helper to bold the search string in a value
       function boldSearch(str, search) {
         if (!search) return str;
-        // Escape regex special chars in search
         const esc = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         return str.replace(new RegExp(esc, 'gi'), match => `<span style="font-weight:bold;color:#12409f">${match}</span>`);
       }
+      // Helper to add context for all text mode (multiple matches, full sentence/line)
+      function allContextsWithBold(str, search) {
+        if (!search) return [str];
+        // Strip HTML tags for context extraction
+        const plain = str.replace(/<[^>]+>/g, '');
+        const esc = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(esc, 'gi');
+        let result = [];
+        let m;
+        while ((m = regex.exec(plain)) !== null) {
+          // Find sentence boundaries
+          let start = plain.lastIndexOf('.', m.index);
+          let excl = plain.lastIndexOf('!', m.index);
+          let quest = plain.lastIndexOf('?', m.index);
+          let br = plain.lastIndexOf('\n', m.index);
+          start = Math.max(start, excl, quest, br);
+          start = start === -1 ? 0 : start + 1;
+          let endDot = plain.indexOf('.', m.index + search.length);
+          let endExcl = plain.indexOf('!', m.index + search.length);
+          let endQuest = plain.indexOf('?', m.index + search.length);
+          let endBr = plain.indexOf('\n', m.index + search.length);
+          let ends = [endDot, endExcl, endQuest, endBr].filter(e => e !== -1);
+          let end = ends.length ? Math.min(...ends) : plain.length;
+          // If no sentence punctuation, fall back to full line
+          if (end === plain.length && plain.indexOf('\n', m.index + search.length) !== -1) {
+            end = plain.indexOf('\n', m.index + search.length);
+          }
+          let context = plain.slice(start, end).trim();
+          context = context.replace(new RegExp(esc, 'gi'), mm => `<span style=\"font-weight:bold;color:#12409f\">${mm}</span>`);
+          result.push(context);
+        }
+        // LOG: context extraction
+        if (result.length > 1) console.log('[TextReplacer] allContextsWithBold:', {search, result});
+        return result.length ? result : [plain];
+      }
       reportDiv.innerHTML += changes.map(c => {
         let title = c.name;
-        // Build folder path for all document types
         let folderPath = [];
         let folder = c.folder;
         while (folder) {
@@ -317,22 +353,53 @@ new (class TextReplacerApp extends Application {
           }
         }
         // Add tags: document type and field type
-        return `
-          <div class="replace-result">
-            <div class="replace-result-title">
-              <div class="replace-title" data-type="${c.type}" data-id="${c.id}"${c.pageId ? ` data-page-id="${c.pageId}"` : ''}${c.soundId ? ` data-sound-id="${c.soundId}"` : ''}>${title}</div>
-              <div class="replace-result-tag">${c.type}</div><div class="replace-field-tag">${c.fieldTag}</div>
-            </div>
-            <div class="replace-old">
-              <span class="code-old-label">OLD</span>
-              <span class="code-old">${boldSearch(c.old, oldPath)}</span>
-            </div>
-            <div class="replace-new">
-              <span class="code-new-label">NEW</span>
-              <span class="code-new">${boldSearch(c.new, newPath)}</span>
-            </div>
-          </div>`;
-      }).join(" ");
+        let isTextField = c.type === 'journal-text';
+        if (matchMode === 'all' && isTextField) {
+          // Debug logging
+          console.log('[TextReplacer] REPORT: c.fullText:', c.fullText);
+          console.log('[TextReplacer] REPORT: c.old:', c.old);
+          const oldContexts = allContextsWithBold(c.fullText || c.old, oldPath);
+          const newContexts = allContextsWithBold((c.fullText || c.old).replaceAll(oldPath, newPath), newPath);
+          console.log('[TextReplacer] REPORT: oldContexts:', oldContexts);
+          console.log('[TextReplacer] REPORT: newContexts:', newContexts);
+          // TEMP: Render raw context output for debugging
+          return oldContexts.map((ctx, i) => `
+            <div class=\"replace-result\">
+              <div class=\"replace-result-title\">
+                <div class=\"replace-title\" data-type=\"${c.type}\" data-id=\"${c.id}\"${c.pageId ? ` data-page-id=\"${c.pageId}\"` : ''}${c.soundId ? ` data-sound-id=\"${c.soundId}\"` : ''}>${title}</div>
+                <div class=\"replace-result-tag\">${c.type}</div><div class=\"replace-field-tag\">${c.fieldTag}</div>
+              </div>
+              <div class=\"replace-old\">
+                <span class=\"code-old-label\">OLD</span>
+                <span class=\"code-old\">${ctx}</span>
+                <div style=\"color:red;font-size:0.8em;\">DEBUG: ${JSON.stringify(ctx)}</div>
+              </div>
+              <div class=\"replace-new\">
+                <span class=\"code-new-label\">NEW</span>
+                <span class=\"code-new\">${newContexts[i] || newContexts[0]}</span>
+                <div style=\"color:red;font-size:0.8em;\">DEBUG: ${JSON.stringify(newContexts[i] || newContexts[0])}</div>
+              </div>
+            </div>`).join('');
+        } else {
+          let oldDisplay = boldSearch(c.old, oldPath);
+          let newDisplay = boldSearch(c.new, newPath);
+          return `
+            <div class=\"replace-result\">
+              <div class=\"replace-result-title\">
+                <div class=\"replace-title\" data-type=\"${c.type}\" data-id=\"${c.id}\"${c.pageId ? ` data-page-id=\"${c.pageId}\"` : ''}${c.soundId ? ` data-sound-id=\"${c.soundId}\"` : ''}>${title}</div>
+                <div class=\"replace-result-tag\">${c.type}</div><div class=\"replace-field-tag\">${c.fieldTag}</div>
+              </div>
+              <div class=\"replace-old\">
+                <span class=\"code-old-label\">OLD</span>
+                <span class=\"code-old\">${oldDisplay}</span>
+              </div>
+              <div class=\"replace-new\">
+                <span class=\"code-new-label\">NEW</span>
+                <span class=\"code-new\">${newDisplay}</span>
+              </div>
+            </div>`;
+        }
+      }).join("");
       setTimeout(() => {
         reportDiv.querySelectorAll('.replace-title').forEach(el => {
           el.addEventListener('click', function() {
