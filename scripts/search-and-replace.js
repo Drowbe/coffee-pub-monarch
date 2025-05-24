@@ -293,9 +293,9 @@ new (class TextReplacerApp extends Application {
         const esc = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         return str.replace(new RegExp(esc, 'gi'), match => `<span style="font-weight:bold;color:#12409f">${match}</span>`);
       }
-      // Helper to add context for all text mode (multiple matches, full sentence/line)
-      function allContextsWithBold(str, search) {
-        if (!search) return [str];
+      // Helper to add context for all text mode (multiple matches, full sentence/line, and correct new context)
+      function allContextsWithBold(str, search, replace) {
+        if (!search) return [{old: str, new: str}];
         // Strip HTML tags for context extraction
         const plain = str.replace(/<[^>]+>/g, '');
         const esc = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -316,15 +316,20 @@ new (class TextReplacerApp extends Application {
           let endBr = plain.indexOf('\n', m.index + search.length);
           let ends = [endDot, endExcl, endQuest, endBr].filter(e => e !== -1);
           let end = ends.length ? Math.min(...ends) : plain.length;
-          // If no sentence punctuation, fall back to full line
           if (end === plain.length && plain.indexOf('\n', m.index + search.length) !== -1) {
             end = plain.indexOf('\n', m.index + search.length);
           }
           let context = plain.slice(start, end).trim();
-          context = context.replace(new RegExp(esc, 'gi'), mm => `<span style=\"font-weight:bold;color:#12409f\">${mm}</span>`);
-          result.push(context);
+          // For old: bold the matched search term
+          let oldContext = context.replace(new RegExp(esc, 'gi'), mm => `<span style=\"font-weight:bold;color:#12409f\">${mm}</span>`);
+          // For new: replace only the matched occurrence in this context, bold the replacement
+          let relIndex = m.index - start;
+          let before = context.slice(0, relIndex);
+          let after = context.slice(relIndex + search.length);
+          let newContext = before + `<span style=\"font-weight:bold;color:#12409f\">${replace}</span>` + after;
+          result.push({old: oldContext, new: newContext});
         }
-        return result.length ? result : [plain];
+        return result.length ? result : [{old: plain, new: plain}];
       }
       reportDiv.innerHTML += changes.map(c => {
         let title = c.name;
@@ -343,12 +348,11 @@ new (class TextReplacerApp extends Application {
             title = folderPath.join(' → ') + ' → ' + c.name;
           }
         }
-        // Add tags: document type and field type
         let isTextField = c.type === 'journal-text';
         if (matchMode === 'all' && isTextField) {
-          const oldContexts = allContextsWithBold(c.fullText || c.old, oldPath);
-          const newContexts = allContextsWithBold((c.fullText || c.old).replaceAll(oldPath, newPath), newPath);
-          return oldContexts.map((ctx, i) => `
+          // Show all matches with context for text fields, with correct new context
+          const contexts = allContextsWithBold(c.fullText || c.old, oldPath, newPath);
+          return contexts.map(ctx => `
             <div class=\"replace-result\">
               <div class=\"replace-result-title\">
                 <div class=\"replace-title\" data-type=\"${c.type}\" data-id=\"${c.id}\"${c.pageId ? ` data-page-id=\"${c.pageId}\"` : ''}${c.soundId ? ` data-sound-id=\"${c.soundId}\"` : ''}>${title}</div>
@@ -356,11 +360,11 @@ new (class TextReplacerApp extends Application {
               </div>
               <div class=\"replace-old\">
                 <span class=\"code-old-label\">OLD</span>
-                <span class=\"code-old\">${ctx}</span>
+                <span class=\"code-old\">${ctx.old}</span>
               </div>
               <div class=\"replace-new\">
                 <span class=\"code-new-label\">NEW</span>
-                <span class=\"code-new\">${newContexts[i] || newContexts[0]}</span>
+                <span class=\"code-new\">${ctx.new}</span>
               </div>
             </div>`).join('');
         } else {
