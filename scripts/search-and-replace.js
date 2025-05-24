@@ -324,8 +324,6 @@ new (class TextReplacerApp extends Application {
           context = context.replace(new RegExp(esc, 'gi'), mm => `<span style=\"font-weight:bold;color:#12409f\">${mm}</span>`);
           result.push(context);
         }
-        // LOG: context extraction
-        if (result.length > 1) console.log('[TextReplacer] allContextsWithBold:', {search, result});
         return result.length ? result : [plain];
       }
       reportDiv.innerHTML += changes.map(c => {
@@ -348,14 +346,8 @@ new (class TextReplacerApp extends Application {
         // Add tags: document type and field type
         let isTextField = c.type === 'journal-text';
         if (matchMode === 'all' && isTextField) {
-          // Debug logging
-          console.log('[TextReplacer] REPORT: c.fullText:', c.fullText);
-          console.log('[TextReplacer] REPORT: c.old:', c.old);
           const oldContexts = allContextsWithBold(c.fullText || c.old, oldPath);
           const newContexts = allContextsWithBold((c.fullText || c.old).replaceAll(oldPath, newPath), newPath);
-          console.log('[TextReplacer] REPORT: oldContexts:', oldContexts);
-          console.log('[TextReplacer] REPORT: newContexts:', newContexts);
-          // TEMP: Render raw context output for debugging
           return oldContexts.map((ctx, i) => `
             <div class=\"replace-result\">
               <div class=\"replace-result-title\">
@@ -365,12 +357,10 @@ new (class TextReplacerApp extends Application {
               <div class=\"replace-old\">
                 <span class=\"code-old-label\">OLD</span>
                 <span class=\"code-old\">${ctx}</span>
-                <div style=\"color:red;font-size:0.8em;\">DEBUG: ${JSON.stringify(ctx)}</div>
               </div>
               <div class=\"replace-new\">
                 <span class=\"code-new-label\">NEW</span>
                 <span class=\"code-new\">${newContexts[i] || newContexts[0]}</span>
-                <div style=\"color:red;font-size:0.8em;\">DEBUG: ${JSON.stringify(newContexts[i] || newContexts[0])}</div>
               </div>
             </div>`).join('');
         } else {
