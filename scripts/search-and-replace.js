@@ -455,8 +455,8 @@ new (class TextReplacerApp extends Application {
 }
 .text-replacer-left {
   flex: 1;
-  max-width: 350px;
-  min-width: 350px;
+  max-width: 400px;
+  min-width: 400px;
 }
 .text-replacer-right {
   flex: 1;
@@ -489,7 +489,10 @@ new (class TextReplacerApp extends Application {
 .button-report,
 .button-search {
   border: none;
-  padding: 5px 10px;
+  padding-top: 0px;
+padding-bottom: 0px;
+padding-left: 0px;
+padding-right: 0px;
   border-radius: 5px;
 }
 .button-report,
