@@ -188,6 +188,16 @@ new (class TextReplacerApp extends Application {
             : img.replaceAll(oldPath, newPath);
           changes.push({ type, name: doc.name, field: imgField, old: img, new: newVal, id: doc.id, docClass: collection.documentClass, folder: doc.folder, fieldTag: "IMAGES" });
         }
+        // For actors, also check the token path
+        if (type === 'actors') {
+          const tokenPath = foundry.utils.getProperty(doc, 'prototypeToken.texture.src');
+          if (typeof tokenPath === "string" && match(tokenPath)) {
+            let newVal = (matchMode === "filename")
+              ? tokenPath.replace(oldPath, newPath)
+              : tokenPath.replaceAll(oldPath, newPath);
+            changes.push({ type, name: doc.name, field: 'prototypeToken.texture.src', old: tokenPath, new: newVal, id: doc.id, docClass: collection.documentClass, folder: doc.folder, fieldTag: "IMAGES" });
+          }
+        }
       }
     };
 
