@@ -17,6 +17,25 @@ new (class TextReplacerApp extends Application {
 
   activateListeners(html) {
     super.activateListeners(html);
+    html.find("button[name='clearFields']").on("click", () => {
+      // Reset all input fields
+      html.find('[name="oldPath"]').val("");
+      html.find('[name="newPath"]').val("");
+      html.find('[name="folderFilter"]').val("");
+      html.find('[name="matchMode"]').val("all");
+      html.find('[name="updateActors"]').prop('checked', false);
+      html.find('[name="updateItems"]').prop('checked', false);
+      html.find('[name="updateScenes"]').prop('checked', false);
+      html.find('[name="updateJournals"]').prop('checked', false);
+      html.find('[name="updateTables"]').prop('checked', false);
+      html.find('[name="updatePlaylists"]').prop('checked', false);
+      html.find('[name="targetImages"]').prop('checked', false);
+      html.find('[name="targetText"]').prop('checked', false);
+      html.find('[name="targetAudio"]').prop('checked', false);
+      // Clear the results box
+      html.find('#report-area').html('<p>Always back up your files files before running a mass change.</p><p>Run a search before doing a mass replace to verify what will be changed.</p>');
+      html.find('input, select, textarea').prop('disabled', false).prop('readonly', false);
+    });
     html.find("button[name='runReport']").on("click", () => this._handleReplace(html, false));
     html.find("button[name='runReplace']").on("click", async () => {
       if (!confirm("Are you sure you want to perform a mass replace? This cannot be undone.")) return;
@@ -439,7 +458,7 @@ new (class TextReplacerApp extends Application {
     }
 
     ui.notifications.info(`✅ Replaced ${changes.length} image paths.`);
-    log(`<p><strong style='color:darkgreen;'>Success!</strong> ${changes.length} paths updated.</p>`);
+    log(`<p><strong style='color:darkgreen;'>Success!</strong> ${changes.length} references updated.</p>`);
   }
 
   async _renderInner(data) {
@@ -508,20 +527,26 @@ new (class TextReplacerApp extends Application {
   margin-bottom: 1em;
   display: block;
 }
+.button-clear,
+.button-replace,
 .button-report,
 .button-search {
-  background-color: rgb(34, 86, 39);
-  color: #ffffff;
   border: none;
   padding: 5px 10px;
   border-radius: 5px;
 }
+.button-report,
+.button-search {
+  background-color: rgb(34, 86, 39);
+  color: #ffffff;
+}
 .button-replace {
   background-color: rgb(87, 44, 53);
   color: #ffffff;
-  border: none;
-  padding: 5px 10px;
-  border-radius: 5px;
+}
+.button-clear {
+  background-color: rgb(42, 51, 56);
+  color: #ffffff;
 }
 .form-group label {
   display: block;
@@ -624,6 +649,7 @@ new (class TextReplacerApp extends Application {
 .code-old {
   color: #600;
 }
+
 </style>
       <div class="text-replacer-flex">
         <div class="text-replacer-left">
@@ -674,6 +700,7 @@ new (class TextReplacerApp extends Application {
               </div>
             </fieldset>
             <div class="form-group" style="margin-top:1em;">
+              <button type="button" name="clearFields" class="button-clear">CLEAR</button>
               <button type="button" name="runReport" class="button-search">RUN REPORT</button>
               <button type="button" name="runReplace" class="button-replace">MASS REPLACE</button>
             </div>
