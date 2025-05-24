@@ -388,8 +388,7 @@ new (class TextReplacerApp extends Application {
           console.error('[TextReplacer] Error updating document:', c, err);
         }
       }
-      const leadLine = `<p><strong style='color:darkgreen;'>Success!</strong> ${changes.length} references updated.</p>`;
-      reportDiv.innerHTML = renderResults(changes, matchMode, oldPath, newPath, leadLine);
+      reportDiv.innerHTML = renderResults(changes, matchMode, oldPath, newPath, '') + `<p><strong style='color:darkgreen;'>Success!</strong> ${changes.length} references updated.</p>`;
       setTimeout(() => {
         reportDiv.querySelectorAll('.replace-title').forEach(el => {
           el.addEventListener('click', function() {
