@@ -163,12 +163,11 @@ new (class TextReplacerApp extends Application {
       for (const doc of docs) {
         const img = foundry.utils.getProperty(doc, imgField);
         if (typeof img === "string" && match(img)) {
-          let oldVal = getMatchedPortion(img, matchMode, oldPath);
-          if (!oldVal) continue;
+          // Always set c.old to the full value for images/paths
           let newVal = (matchMode === "filename")
-            ? oldVal.replace(oldPath, newPath)
+            ? img.replace(oldPath, newPath)
             : img.replaceAll(oldPath, newPath);
-          changes.push({ type, name: doc.name, field: imgField, old: oldVal, new: newVal, id: doc.id, docClass: collection.documentClass, folder: doc.folder, fieldTag: "IMAGES" });
+          changes.push({ type, name: doc.name, field: imgField, old: img, new: newVal, id: doc.id, docClass: collection.documentClass, folder: doc.folder, fieldTag: "IMAGES" });
         }
       }
     };
@@ -194,12 +193,10 @@ new (class TextReplacerApp extends Application {
       for (const scene of scenesToProcess) {
         const bg = scene.background?.src;
         if (typeof bg === "string" && match(bg)) {
-          let oldVal = getMatchedPortion(bg, matchMode, oldPath);
-          if (!oldVal) continue;
           let newVal = (matchMode === "filename")
-            ? oldVal.replace(oldPath, newPath)
+            ? bg.replace(oldPath, newPath)
             : bg.replaceAll(oldPath, newPath);
-          changes.push({ type: "scene", name: scene.name, field: "background.src", old: oldVal, new: newVal, id: scene.id, folder: scene.folder, fieldTag: "IMAGES" });
+          changes.push({ type: "scene", name: scene.name, field: "background.src", old: bg, new: newVal, id: scene.id, folder: scene.folder, fieldTag: "IMAGES" });
         }
       }
     }
@@ -220,12 +217,10 @@ new (class TextReplacerApp extends Application {
       for (const journal of journalsToProcess) {
         for (const page of journal.pages.contents) {
           if (page.type === "image" && targetImages && match(page.src)) {
-            let oldVal = getMatchedPortion(page.src, matchMode, oldPath);
-            if (!oldVal) continue;
             let newVal = (matchMode === "filename")
-              ? oldVal.replace(oldPath, newPath)
+              ? page.src.replace(oldPath, newPath)
               : page.src.replaceAll(oldPath, newPath);
-            changes.push({ type: "journal-image", name: `${journal.name} → ${page.name}`, field: "src", old: oldVal, new: newVal, id: journal.id, pageId: page.id, folder: journal.folder, fieldTag: "IMAGES" });
+            changes.push({ type: "journal-image", name: `${journal.name} → ${page.name}`, field: "src", old: page.src, new: newVal, id: journal.id, pageId: page.id, folder: journal.folder, fieldTag: "IMAGES" });
           }
           if (page.type === "text" && targetText && page.text?.content?.includes(oldPath)) {
             let matches = [];
@@ -280,12 +275,10 @@ new (class TextReplacerApp extends Application {
       for (const playlist of playlistsToProcess) {
         for (const sound of playlist.sounds.contents) {
           if (typeof sound.path === "string" && match(sound.path)) {
-            let oldVal = getMatchedPortion(sound.path, matchMode, oldPath);
-            if (!oldVal) continue;
             let newVal = (matchMode === "filename")
-              ? oldVal.replace(oldPath, newPath)
+              ? sound.path.replace(oldPath, newPath)
               : sound.path.replaceAll(oldPath, newPath);
-            changes.push({ type: "playlists", name: `${playlist.name} → ${sound.name}`, field: "path", old: oldVal, new: newVal, id: playlist.id, soundId: sound.id, folder: playlist.folder, fieldTag: "AUDIO" });
+            changes.push({ type: "playlists", name: `${playlist.name} → ${sound.name}`, field: "path", old: sound.path, new: newVal, id: playlist.id, soundId: sound.id, folder: playlist.folder, fieldTag: "AUDIO" });
           }
         }
       }
