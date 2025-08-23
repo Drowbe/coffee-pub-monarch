@@ -1,3 +1,14 @@
+// ================================================================== 
+// ===== IMPORTS ====================================================
+// ================================================================== 
+
+// Grab the module data
+import { MODULE  } from './const.js';
+
+// ================================================================== 
+// ===== CLASS ======================================================
+// ================================================================== 
+
 class CoffeePubMonarch {
     static ID = 'coffee-pub-monarch';
     
@@ -17,6 +28,9 @@ class CoffeePubMonarch {
 
         // Hook into the Module Management Application
         Hooks.on('renderModuleManagement', this._onRenderModuleManagement.bind(this));
+        
+        // Hook into the main settings window to add Import/Export buttons
+        Hooks.on('renderPackageConfiguration', this._onRenderPackageConfiguration.bind(this));
         
         // Hook into module dependency changes
         Hooks.on('renderDialog', (dialog, html) => {
@@ -47,24 +61,24 @@ class CoffeePubMonarch {
     }
 
     static async _initializeDefaultSet() {
-        console.warn("COFFEE-PUB-MONARCH | Current moduleSets:", game.settings.get(this.ID, 'moduleSets'));
+        console.log("COFFEE PUB • MONARCH | Current moduleSets: ", game.settings.get(this.ID, 'moduleSets'));
         
         const moduleSets = game.settings.get(this.ID, 'moduleSets');
         if (Object.keys(moduleSets).length === 0) {
             // Create a default set with currently active modules
             const activeModules = game.modules.filter(m => m.active).map(m => m.id);
-            console.warn("COFFEE-PUB-MONARCH | Active modules for default set:", activeModules);
+            console.log("COFFEE PUB • MONARCH | Active modules for default set: ", activeModules);
             
             moduleSets['Default Configuration'] = activeModules;
             await game.settings.set(this.ID, 'moduleSets', moduleSets);
-            console.warn("COFFEE-PUB-MONARCH | Initialized moduleSets:", moduleSets);
+            console.log("COFFEE PUB • MONARCH | Initialized moduleSets: ", moduleSets);
         }
     }
 
     static async _onRenderModuleManagement(app, html, data) {
         // Add our controls to the module management window
         const moduleSets = game.settings.get(this.ID, 'moduleSets');
-        console.warn("COFFEE-PUB-MONARCH | Rendering with moduleSets:", moduleSets);
+        console.log("COFFEE PUB • MONARCH | Rendering with moduleSets: ", moduleSets);
         
         // Store initial module states
         const initialModuleStates = new Map();
@@ -104,6 +118,261 @@ class CoffeePubMonarch {
 
         // Bind our event listeners
         this._activateListeners(html, app);
+    }
+
+    static async _onRenderPackageConfiguration(app, html, data) {
+        // Only add buttons to the main settings window, not module management
+        if (app.id === 'module-management') return;
+        
+        // Find the Reset Defaults button to place our buttons near it
+        const resetButton = html.find('button.reset-all');
+        if (resetButton.length) {
+            // Create our Import/Export buttons
+            const importExportButtons = $(`
+                <div class="monarch-settings-buttons" style="margin-top: 0.5em;">
+                    <button class="monarch-import-settings" type="button" style="margin-right: 0.5em;">
+                        <i class="fas fa-file-import"></i> Import Settings
+                    </button>
+                    <button class="monarch-export-settings" type="button">
+                        <i class="fas fa-file-export"></i> Export Settings
+                    </button>
+                </div>
+            `);
+            
+            // Insert after the Reset Defaults button
+            resetButton.after(importExportButtons);
+            
+            // Bind event listeners
+            this._activateSettingsWindowListeners(html);
+        }
+    }
+
+    static _activateSettingsWindowListeners(html) {
+        // Import Settings button
+        html.find('.monarch-import-settings').click(async (event) => {
+            event.preventDefault();
+            
+            const content = `
+                <form>
+                    <h2 style="margin-bottom: 0.5em;">Import All Module Settings</h2>
+                    <div class="form-group">
+                        <label>Import JSON File</label>
+                        <div class="form-fields">
+                            <input type="file" accept=".json" required>
+                        </div>
+                    </div>
+                    <p class="notes">Warning: This will replace your current module settings. Make sure to backup first!</p>
+                </form>`;
+
+            const dialog = new Dialog({
+                title: "Import All Module Settings",
+                content: content,
+                buttons: {
+                    import: {
+                        icon: '<i class="fas fa-file-import"></i>',
+                        label: "Import",
+                        callback: async (html) => {
+                            const fileInput = html.find('input[type="file"]')[0];
+                            const file = fileInput.files[0];
+                            if (!file) return;
+
+                            try {
+                                const reader = new FileReader();
+                                reader.onload = async (e) => {
+                                    const importData = JSON.parse(e.target.result);
+                                    const importedSettings = importData.allModuleSettings;
+
+                                    if (!importedSettings) {
+                                        ui.notifications.error("Invalid import file format. Expected 'allModuleSettings'.");
+                                        return;
+                                    }
+
+                                    // Analyze what will be imported
+                                    const allModules = new Set(game.modules.keys());
+                                    const importedModules = new Set(Object.keys(importedSettings));
+                                    const missingModules = [...importedModules].filter(id => !allModules.has(id));
+                                    const availableModules = [...importedModules].filter(id => allModules.has(id));
+
+                                    // Show preview dialog
+                                    const previewContent = `
+                                        <h3>Import Preview</h3>
+                                        <div class="form-group">
+                                            <label>Available Modules (will import settings):</label>
+                                            <div class="available-modules" style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9;">
+                                                ${availableModules.length ? availableModules.join('<br>') : 'None'}
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Missing Modules (settings will be skipped):</label>
+                                            <div class="missing-modules" style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9;">
+                                                ${missingModules.length ? missingModules.join('<br>') : 'None'}
+                                            </div>
+                                        </div>
+                                        <p><strong>Total settings to import:</strong> ${availableModules.length} modules</p>`;
+
+                                    const previewDialog = new Dialog({
+                                        title: "Import Preview",
+                                        content: previewContent,
+                                        buttons: {
+                                            proceed: {
+                                                icon: '<i class="fas fa-file-import"></i>',
+                                                label: "Proceed with Import",
+                                                callback: async () => {
+                                                    try {
+                                                        let importedCount = 0;
+                                                        let skippedCount = 0;
+
+                                                        // Import settings for available modules
+                                                        for (const [moduleId, moduleSettings] of Object.entries(importedSettings)) {
+                                                            if (game.modules.has(moduleId)) {
+                                                                for (const [settingKey, settingData] of Object.entries(moduleSettings)) {
+                                                                    try {
+                                                                        // Only import if the setting exists and is world-scoped
+                                                                        const existingSetting = game.settings.settings.get(moduleId)?.get(settingKey);
+                                                                        if (existingSetting && existingSetting.scope === 'world') {
+                                                                            await game.settings.set(moduleId, settingKey, settingData.value);
+                                                                            importedCount++;
+                                                                        }
+                                                                    } catch (error) {
+                                                                        console.warn(`COFFEE PUB • MONARCH | Could not import setting ${moduleId}.${settingKey}:`, error);
+                                                                        skippedCount++;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Show success dialog
+                                                        const successContent = `
+                                                            <h3>Import Complete</h3>
+                                                            <p><strong>Successfully imported:</strong> ${importedCount} settings</p>
+                                                            <p><strong>Skipped:</strong> ${skippedCount} settings</p>
+                                                            <p><strong>Modules processed:</strong> ${availableModules.length}</p>
+                                                            <p class="notes">Note: Some settings may require a page reload to take effect.</p>`;
+
+                                                        const successDialog = new Dialog({
+                                                            title: "Import Complete",
+                                                            content: successContent,
+                                                            buttons: {
+                                                                reload: {
+                                                                    icon: '<i class="fas fa-sync"></i>',
+                                                                    label: "Reload Now",
+                                                                    callback: () => window.location.reload()
+                                                                },
+                                                                close: {
+                                                                    icon: '<i class="fas fa-times"></i>',
+                                                                    label: "Close"
+                                                                }
+                                                            },
+                                                            default: "close"
+                                                        });
+                                                        successDialog.render(true);
+
+                                                    } catch (error) {
+                                                        console.error("COFFEE PUB • MONARCH | Error importing settings:", error);
+                                                        ui.notifications.error("COFFEE PUB • MONARCH | Failed to import settings. Check the console for details.");
+                                                    }
+                                                }
+                                            },
+                                            cancel: {
+                                                icon: '<i class="fas fa-times"></i>',
+                                                label: "Cancel"
+                                            }
+                                        },
+                                        default: "proceed"
+                                    });
+                                    previewDialog.render(true);
+                                };
+                                reader.readAsText(file);
+                            } catch (error) {
+                                console.error("COFFEE PUB • MONARCH | Error importing settings:", error);
+                                ui.notifications.error("COFFEE PUB • MONARCH | Failed to import settings. Check the console for details.");
+                            }
+                        }
+                    },
+                    cancel: {
+                        icon: '<i class="fas fa-times"></i>',
+                        label: "Cancel"
+                    }
+                },
+                default: "import"
+            });
+            dialog.render(true);
+        });
+
+        // Export Settings button
+        html.find('.monarch-export-settings').click(async (event) => {
+            event.preventDefault();
+            
+            // Use the proven Foundry V12 approach to export ALL settings
+            const defs = game.settings.settings;  // Map<"namespace.key", SettingConfig>
+            const out = {};
+            
+            console.log("COFFEE PUB • MONARCH | Starting export of all settings...");
+            console.log("COFFEE PUB • MONARCH | Settings registry size:", defs.size);
+            
+            for (const [fullKey, cfg] of defs) {
+                const [namespace, key] = fullKey.split(".", 2);
+                out[namespace] ??= {};
+                
+                try {
+                    // Check if the setting is actually registered and accessible
+                    if (!game.settings.settings.has(fullKey)) {
+                        console.warn(`COFFEE PUB • MONARCH | Skipping unregistered setting: ${fullKey}`);
+                        out[namespace][key] = { 
+                            __exportError: "Setting not registered",
+                            scope: cfg.scope,
+                            type: cfg.type?.name || 'Unknown'
+                        };
+                        continue;
+                    }
+                    
+                    // Pull the current value from the appropriate storage (world or client)
+                    const value = game.settings.get(namespace, key);
+                    
+                    // Deep clone to keep it JSON-safe
+                    const safeValue = foundry.utils.deepClone?.(value) ?? value;
+                    
+                    // Store with metadata
+                    out[namespace][key] = {
+                        value: safeValue,
+                        scope: cfg.scope,
+                        type: cfg.type?.name || 'Unknown',
+                        config: cfg.config,
+                        default: cfg.default
+                    };
+                    
+                } catch (err) {
+                    // If something can't be read/serialized, keep a note so you know what failed
+                    console.warn(`COFFEE PUB • MONARCH | Failed to export ${fullKey}:`, err);
+                    out[namespace][key] = { 
+                        __exportError: String(err),
+                        scope: cfg.scope,
+                        type: cfg.type?.name || 'Unknown'
+                    };
+                }
+            }
+            
+            console.log("COFFEE PUB • MONARCH | Export complete. Namespaces found:", Object.keys(out));
+            
+            const exportData = {
+                allModuleSettings: out,
+                exportedAt: new Date().toISOString(),
+                foundryVersion: game.version,
+                exportedBy: this.ID,
+                totalSettings: Object.values(out).reduce((sum, ns) => sum + Object.keys(ns).length, 0)
+            };
+            
+            const now = new Date();
+            const timestamp = now.toISOString().replace(/:/g, '-').replace(/\./g, '-');
+            const filename = `CoffeePub-MONARCH-Settings-Export-${timestamp}.json`;
+            const data = JSON.stringify(exportData, null, 2);
+            
+            // Use Foundry's built-in saveDataToFile
+            saveDataToFile(data, "text/json", filename);
+            
+            // Show success notification
+            ui.notifications.info(`All settings exported successfully! (${exportData.totalSettings} settings across ${Object.keys(out).length} namespaces)`);
+        });
     }
 
     static _activateListeners(html, app) {
@@ -221,8 +490,8 @@ class CoffeePubMonarch {
                                 await game.settings.set('core', 'moduleConfiguration', moduleConfig);
                                 window.location.reload();
                             } catch (error) {
-                                console.error("COFFEE-PUB-MONARCH | Error saving module set:", error);
-                                ui.notifications.error("Failed to save module set. Check the console for details.");
+                                console.error("COFFEE PUB • MONARCH | Error saving module set:", error);
+                                ui.notifications.error("COFFEE PUB • MONARCH | Failed to save module set. Check the console for details.");
                             }
                         }
                     },
@@ -295,8 +564,8 @@ class CoffeePubMonarch {
                                 await game.settings.set('core', 'moduleConfiguration', moduleConfig);
                                 window.location.reload();
                             } catch (error) {
-                                console.error("COFFEE-PUB-MONARCH | Error updating module set:", error);
-                                ui.notifications.error("Failed to update module set. Check the console for details.");
+                                console.error("COFFEE PUB • MONARCH | Error updating module set:", error);
+                                ui.notifications.error("COFFEE PUB • MONARCH | Failed to update module set. Check the console for details.");
                             }
                         }
                     },
@@ -578,8 +847,8 @@ ${extraModules.length ? extraModules.join('\n') : 'None'}`;
                                 };
                                 reader.readAsText(file);
                             } catch (error) {
-                                console.error("COFFEE-PUB-MONARCH | Error importing module sets:", error);
-                                ui.notifications.error("Failed to import module sets. Check the console for details.");
+                                console.error("COFFEE PUB • MONARCH | Error importing module sets:", error);
+                                ui.notifications.error("COFFEE PUB • MONARCH | Failed to import module sets. Check the console for details.");
                             }
                         }
                     },

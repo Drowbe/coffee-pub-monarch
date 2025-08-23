@@ -1,4 +1,17 @@
 // Full Image Path Replacer Macro with Folder Filter, Match Modes, UI Enhancements
+
+// ================================================================== 
+// ===== IMPORTS ====================================================
+// ================================================================== 
+
+// Grab the module data
+import { MODULE  } from './const.js';
+
+// ================================================================== 
+// ===== CLASS ======================================================
+// ================================================================== 
+
+
 new (class TextReplacerApp extends Application {
   static get defaultOptions() {
     return foundry.utils.mergeObject(super.defaultOptions, {
@@ -275,7 +288,7 @@ new (class TextReplacerApp extends Application {
               }
             }
             // LOG: fullText and matches
-            console.log('[TextReplacer] Adding journal-text change:', {
+            console.log('COFFEE PUB • MONARCH | [TextReplacer] Adding journal-text change:', {
               fullText: page.text.content,
               matches
             });
@@ -395,7 +408,7 @@ new (class TextReplacerApp extends Application {
             }
           }
         } catch (err) {
-          console.error('[TextReplacer] Error updating document:', c, err);
+          console.error('COFFEE PUB • MONARCH | [TextReplacer] Error updating document:', c, err);
         }
       }
       reportDiv.innerHTML = renderResults(changes, matchMode, oldPath, newPath, '') + `<p><strong style='color:darkgreen;'>Success!</strong> ${changes.length} references updated.</p>`;
