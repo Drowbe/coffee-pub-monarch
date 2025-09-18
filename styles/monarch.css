@@ -49,4 +49,29 @@
 
 .package.module-current-change {
     background: rgba(255, 255, 0, 0.1);
-} 
+}
+
+/* Settings Import/Export Buttons */
+.monarch-settings-buttons {
+    margin-top: 8px;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column; /* stack vertically */
+    gap: 2px;
+    flex: 0 0 auto; /* <— prevent stretching */
+    border-top: 1px dotted rgba(0, 0, 0, 0.2);
+    padding-top: 8px;
+    border-bottom: 1px dotted rgba(0, 0, 0, 0.2);
+    padding-bottom: 8px;
+}
+
+.monarch-import-settings,
+.monarch-export-settings {
+    flex: unset;              /* prevent stretching */
+    width: 100%;              /* match Reset Defaults button width */
+    text-align: center;       /* center text + icon */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}

@@ -129,8 +129,8 @@ class CoffeePubMonarch {
         if (resetButton.length) {
             // Create our Import/Export buttons
             const importExportButtons = $(`
-                <div class="monarch-settings-buttons" style="margin-top: 0.5em;">
-                    <button class="monarch-import-settings" type="button" style="margin-right: 0.5em;">
+                <div class="monarch-settings-buttons">
+                    <button class="monarch-import-settings" type="button">
                         <i class="fas fa-file-import"></i> Import Settings
                     </button>
                     <button class="monarch-export-settings" type="button">
@@ -139,8 +139,8 @@ class CoffeePubMonarch {
                 </div>
             `);
             
-            // Insert after the Reset Defaults button
-            resetButton.after(importExportButtons);
+            // Insert before the Reset Defaults button
+            resetButton.before(importExportButtons);
             
             // Bind event listeners
             this._activateSettingsWindowListeners(html);
