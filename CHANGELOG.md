@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Enhanced Module Relationships**: Added comprehensive module recommendations including Coffee Pub Monarch, Squire, and other ecosystem modules
 - **Improved Author Information**: Enhanced author profiles with Discord, GitHub, Patreon, and Reddit links for better community engagement
 - **Bug Reporting Integration**: Added direct GitHub Issues link for streamlined bug reporting and feature requests
+- **Settings Import/Export**: Added Import Settings and Export Settings buttons to the main settings window for easy migration of all module settings between Foundry instances
 
 ### Changed
 - **Version Numbering**: Migrated from semantic versioning (1.12.2) to Foundry VTT version-based numbering (12.1.0)
