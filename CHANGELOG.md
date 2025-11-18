@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [12.1.1] - Settings Import/Export
+
+### Added
+- **Import Preview Dialog**: Added preview dialog before importing settings that shows which modules will have settings imported and which modules are missing
+- **Import Statistics**: Added detailed import statistics showing successfully imported settings count, skipped settings count, and modules processed
+- **World-Scope Filtering**: Import now only processes world-scoped settings, automatically skipping client-scoped settings for security
+- **Export Metadata**: Export now includes comprehensive metadata (scope, type, config flag, default value) for each setting
+- **Export Error Tracking**: Export marks settings that can't be exported with `__exportError` instead of failing, allowing partial exports
+- **Reload Option**: Added convenient reload option in import success dialog to apply settings changes immediately
+
+### Improved
+- **Import User Experience**: Enhanced import workflow with multi-step dialogs (file selection → preview → import → success) for better user control
+- **Error Handling**: Improved error handling throughout import/export process with detailed console logging and user-friendly notifications
+- **Export Filename**: Export filename now includes full timestamp for better organization (`CoffeePub-MONARCH-Settings-Export-YYYY-MM-DD-HH-MM-SS.json`)
+- **Settings Validation**: Import validates that settings exist and are registered before attempting to import them
+- **Module Availability Check**: Import checks module availability before processing, skipping settings for modules that aren't installed
+
+### Fixed
+- **Import Scope Validation**: Fixed import to properly check setting scope before importing, preventing attempts to import client-scoped settings
+- **Setting Registration Check**: Fixed import to verify settings are registered in the current Foundry instance before attempting to set values
+- **Error Recovery**: Fixed export to continue processing even when individual settings fail, ensuring maximum data export
+- **File Format Validation**: Improved validation of import file format with clear error messages for invalid files
+
+
 ## [12.1.0] - MAJOR UPDATE - Blacksmith API Migration
 
 ### Added
