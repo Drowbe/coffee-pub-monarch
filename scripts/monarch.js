@@ -324,6 +324,14 @@ class CoffeePubMonarch {
                                         </div>
                                         <div class="form-group">
                                             <label>Select Modules to Import (all selected by default):</label>
+                                            <div class="form-fields" style="margin-bottom: 0.5em;">
+                                                <button type="button" class="select-all-modules" style="margin-right: 0.5em;">
+                                                    <i class="fas fa-check-square"></i> Select All
+                                                </button>
+                                                <button type="button" class="select-none-modules">
+                                                    <i class="fas fa-square"></i> Select None
+                                                </button>
+                                            </div>
                                             <div class="available-modules" style="max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9;">
                                                 ${availableModules.length ? moduleCheckboxes : '<p>No modules available to import</p>'}
                                             </div>
@@ -341,6 +349,15 @@ class CoffeePubMonarch {
                                     const previewDialog = new Dialog({
                                         title: "Import Preview",
                                         content: previewContent,
+                                        render: (html) => {
+                                            // Add event handlers for Select All/None buttons
+                                            html.find('.select-all-modules').click(() => {
+                                                html.find('.module-import-checkbox').prop('checked', true);
+                                            });
+                                            html.find('.select-none-modules').click(() => {
+                                                html.find('.module-import-checkbox').prop('checked', false);
+                                            });
+                                        },
                                         buttons: {
                                             proceed: {
                                                 icon: '<i class="fas fa-file-import"></i>',
@@ -414,22 +431,9 @@ class CoffeePubMonarch {
                                                                             continue;
                                                                         }
                                                                         
-                                                                        // Validate and prepare the value
-                                                                        let valueToImport = settingData.value;
-                                                                        
-                                                                        // If the value is a string that looks like JSON, validate it
-                                                                        if (typeof valueToImport === 'string' && valueToImport.trim().startsWith('{')) {
-                                                                            try {
-                                                                                JSON.parse(valueToImport);
-                                                                            } catch (jsonError) {
-                                                                                console.warn(`COFFEE PUB • MONARCH | Invalid JSON in setting ${moduleId}.${settingKey}, skipping:`, jsonError);
-                                                                                errorCount++;
-                                                                                continue;
-                                                                            }
-                                                                        }
-                                                                        
-                                                                        // Import the setting - only use the value, let the module handle any additional parameters
-                                                                        await game.settings.set(moduleId, settingKey, valueToImport);
+                                                                        // Import the setting - only use the value, let the module handle validation
+                                                                        // Foundry and the module will validate the value when we set it
+                                                                        await game.settings.set(moduleId, settingKey, settingData.value);
                                                                         importedCount++;
                                                                         if (isWorldScoped) worldScopedCount++;
                                                                         if (isClientScoped) clientScopedCount++;
