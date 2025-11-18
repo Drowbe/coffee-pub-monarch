@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [12.1.2] - Enhanced Settings Import/Export
+
+### Added
+- **Module-Level Import Selection**: Added checkboxes for each module in the import preview, allowing users to selectively import settings from specific modules (all pre-checked by default)
+- **Select All/None Buttons**: Added "Select All" and "Select None" buttons for quick module selection in the import preview
+- **Client-Scoped Settings Import Option**: Added checkbox option to import client-scoped settings (per-user preferences) with clear warnings about personal settings
+- **World-Scoped Settings Import Option**: Added checkbox option to import world-scoped settings (shared world configuration) with GM-only restrictions
+- **Settings Registry Detection**: Added detection of namespaces via settings registry to properly identify systems and modules that may not be in standard collections
+- **Empty JSON String Handling**: Added automatic conversion of empty strings to `"{}"` for settings that expect JSON (prevents validation errors in modules like Torch)
+
+### Improved
+- **Import Dialog Workflow**: Moved import scope checkboxes to the file selection dialog for better user flow
+- **Import Preview Display**: Preview dialog now shows selected import options (world/client scope) and allows module-level selection
+- **Error vs Skip Distinction**: Separated "Skipped (by choice)" from "Errors" in import results for clearer feedback
+- **Module List Organization**: Module list in import preview is now sorted alphabetically by display title for easier navigation
+- **System Detection**: Enhanced detection of game systems (Core, D&D5E, etc.) by checking `game.systems`, `game.system.id`, and settings registry
+- **Event Listener Management**: Switched to event delegation and added proper cleanup hooks to prevent memory leaks
+- **Dialog Titles**: Removed "All" from import dialog title and added preview notice about reviewing changes before final import
+
+### Fixed
+- **Import/Export Buttons Not Appearing**: Fixed buttons not showing on hosted Foundry instances by searching in both `html` and `app.element`, and checking sidebar locations
+- **Duplicate Buttons**: Fixed duplicate import/export buttons appearing by adding existence check before adding buttons
+- **Settings Lookup**: Fixed settings import to use correct `"namespace.key"` format when checking if settings exist in the registry
+- **Core and System Detection**: Fixed Core and D&D5E showing as "missing" by properly detecting systems via multiple methods (game.systems, game.system.id, settings registry)
+- **JSON Validation Errors**: Removed overly strict JSON validation that was incorrectly flagging valid string values (like template strings) as invalid JSON
+- **Empty String Import Errors**: Fixed errors when importing empty strings for settings that expect JSON by converting to valid empty JSON object `"{}"`
+
 ## [12.1.1] - Settings Import/Export
 
 ### Added
