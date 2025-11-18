@@ -271,9 +271,13 @@ class CoffeePubMonarch {
                                     const missingModules = [...importedModules].filter(id => !allModules.has(id));
                                     const availableModules = [...importedModules].filter(id => allModules.has(id));
 
+                                    // Check user permissions
+                                    const isGM = game.user.isGM;
+                                    
                                     // Show preview dialog
                                     const previewContent = `
                                         <h3>Import Preview</h3>
+                                        ${!isGM ? '<p class="notes" style="color: #ff6b6b; margin-bottom: 1em;"><strong>Note:</strong> As a player, you can only import client-scoped settings. World-scoped settings require GM permissions and will be skipped.</p>' : ''}
                                         <div class="form-group">
                                             <label>Available Modules (will import settings):</label>
                                             <div class="available-modules" style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9;">
@@ -286,6 +290,17 @@ class CoffeePubMonarch {
                                                 ${missingModules.length ? missingModules.join('<br>') : 'None'}
                                             </div>
                                         </div>
+                                        <div class="form-group">
+                                            <label class="checkbox">
+                                                <input type="checkbox" name="importClientSettings" id="importClientSettings" ${!isGM ? 'checked' : ''}>
+                                                Import client-scoped settings (per-user preferences)
+                                            </label>
+                                            <p class="notes" style="margin-top: 0.5em; font-size: 0.9em;">
+                                                <strong>Warning:</strong> Client-scoped settings are personal preferences (UI themes, display settings, etc.). 
+                                                Only enable this if you want to copy personal preferences from the export. 
+                                                In multi-user environments, this will only affect your own client settings.
+                                            </p>
+                                        </div>
                                         <p><strong>Total settings to import:</strong> ${availableModules.length} modules</p>`;
 
                                     const previewDialog = new Dialog({
@@ -295,40 +310,101 @@ class CoffeePubMonarch {
                                             proceed: {
                                                 icon: '<i class="fas fa-file-import"></i>',
                                                 label: "Proceed with Import",
-                                                callback: async () => {
+                                                callback: async (html) => {
                                                     try {
+                                                        // Check if user wants to import client-scoped settings
+                                                        const importClientSettings = html.find('#importClientSettings').is(':checked');
+                                                        const isGM = game.user.isGM;
+                                                        
                                                         let importedCount = 0;
                                                         let skippedCount = 0;
+                                                        let worldScopedCount = 0;
+                                                        let clientScopedCount = 0;
+                                                        let permissionDeniedCount = 0;
 
                                                         // Import settings for available modules
                                                         for (const [moduleId, moduleSettings] of Object.entries(importedSettings)) {
                                                             if (game.modules.has(moduleId)) {
                                                                 for (const [settingKey, settingData] of Object.entries(moduleSettings)) {
                                                                     try {
-                                                                        // Only import if the setting exists and is world-scoped
-                                                                        const existingSetting = game.settings.settings.get(moduleId)?.get(settingKey);
-                                                                        if (existingSetting && existingSetting.scope === 'world') {
-                                                                            await game.settings.set(moduleId, settingKey, settingData.value);
-                                                                            importedCount++;
+                                                                        // Check if setting exists - settings registry uses "namespace.key" format
+                                                                        const fullKey = `${moduleId}.${settingKey}`;
+                                                                        const existingSetting = game.settings.settings.get(fullKey);
+                                                                        
+                                                                        if (existingSetting) {
+                                                                            const isWorldScoped = existingSetting.scope === 'world';
+                                                                            const isClientScoped = existingSetting.scope === 'client';
+                                                                            
+                                                                            // Only GMs can import world-scoped settings
+                                                                            if (isWorldScoped && !isGM) {
+                                                                                permissionDeniedCount++;
+                                                                                continue;
+                                                                            }
+                                                                            
+                                                                            // Import world-scoped settings (if GM), client-scoped only if option is checked
+                                                                            if (isWorldScoped || (isClientScoped && importClientSettings)) {
+                                                                                await game.settings.set(moduleId, settingKey, settingData.value);
+                                                                                importedCount++;
+                                                                                if (isWorldScoped) worldScopedCount++;
+                                                                                if (isClientScoped) clientScopedCount++;
+                                                                            } else {
+                                                                                skippedCount++;
+                                                                            }
+                                                                        } else {
+                                                                            skippedCount++;
                                                                         }
                                                                     } catch (error) {
-                                                                        console.warn(`COFFEE PUB • MONARCH | Could not import setting ${moduleId}.${settingKey}:`, error);
-                                                                        skippedCount++;
+                                                                        // Check if it's a permission error
+                                                                        if (error.message && error.message.includes('permission')) {
+                                                                            permissionDeniedCount++;
+                                                                        } else {
+                                                                            console.warn(`COFFEE PUB • MONARCH | Could not import setting ${moduleId}.${settingKey}:`, error);
+                                                                            skippedCount++;
+                                                                        }
                                                                     }
                                                                 }
                                                             }
                                                         }
 
                                                         // Show success dialog
+                                                        let scopeDetails = '';
+                                                        if (isGM && worldScopedCount > 0) {
+                                                            scopeDetails += `<p><strong>World-scoped:</strong> ${worldScopedCount} settings</p>`;
+                                                        }
+                                                        if (importClientSettings && clientScopedCount > 0) {
+                                                            scopeDetails += `<p><strong>Client-scoped:</strong> ${clientScopedCount} settings</p>`;
+                                                        }
+                                                        if (permissionDeniedCount > 0) {
+                                                            scopeDetails += `<p class="notes" style="color: #ff6b6b;"><strong>Permission denied:</strong> ${permissionDeniedCount} world-scoped settings (GM only)</p>`;
+                                                        }
+                                                        
+                                                        let skippedDetails = '';
+                                                        if (skippedCount > 0) {
+                                                            let reasons = [];
+                                                            if (!importClientSettings) {
+                                                                reasons.push('client-scoped settings (checkbox not checked)');
+                                                            }
+                                                            reasons.push('settings not found in current instance');
+                                                            skippedDetails = `<p><strong>Skipped:</strong> ${skippedCount} settings</p>
+                                                                <p class="notes" style="font-size: 0.9em;">Skipped settings include: ${reasons.join(', ')}</p>`;
+                                                        }
+                                                        
+                                                        let title = "Import Complete";
+                                                        if (!isGM && permissionDeniedCount > 0) {
+                                                            title = "Import Complete (Limited)";
+                                                        }
+                                                        
                                                         const successContent = `
-                                                            <h3>Import Complete</h3>
+                                                            <h3>${title}</h3>
                                                             <p><strong>Successfully imported:</strong> ${importedCount} settings</p>
-                                                            <p><strong>Skipped:</strong> ${skippedCount} settings</p>
+                                                            ${scopeDetails}
+                                                            ${skippedDetails}
                                                             <p><strong>Modules processed:</strong> ${availableModules.length}</p>
+                                                            ${!isGM ? '<p class="notes">Note: As a player, you can only import client-scoped settings. World-scoped settings require GM permissions.</p>' : ''}
                                                             <p class="notes">Note: Some settings may require a page reload to take effect.</p>`;
 
                                                         const successDialog = new Dialog({
-                                                            title: "Import Complete",
+                                                            title: title,
                                                             content: successContent,
                                                             buttons: {
                                                                 reload: {
