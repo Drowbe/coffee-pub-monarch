@@ -30,7 +30,13 @@ class CoffeePubMonarch {
         Hooks.on('renderModuleManagement', this._onRenderModuleManagement.bind(this));
         
         // Hook into the main settings window to add Import/Export buttons
-        Hooks.on('renderPackageConfiguration', this._onRenderPackageConfiguration.bind(this));
+        // Use both hooks for compatibility (SettingsConfig for local, ExtendedSettingsConfig for hosted)
+        Hooks.on('renderSettingsConfig', this._onRenderPackageConfiguration.bind(this));
+        Hooks.on('renderExtendedSettingsConfig', this._onRenderPackageConfiguration.bind(this));
+        
+        // Clean up event listeners when settings window closes
+        Hooks.on('closeSettingsConfig', this._onCloseSettingsConfig.bind(this));
+        Hooks.on('closeExtendedSettingsConfig', this._onCloseSettingsConfig.bind(this));
         
         // Hook into module dependency changes
         Hooks.on('renderDialog', (dialog, html) => {
@@ -124,32 +130,104 @@ class CoffeePubMonarch {
         // Only add buttons to the main settings window, not module management
         if (app.id === 'module-management') return;
         
-        // Find the Reset Defaults button to place our buttons near it
-        const resetButton = html.find('button.reset-all');
+        // Check if this is a settings configuration window
+        const appClassName = app.constructor?.name || '';
+        const isSettingsWindow = appClassName.includes('SettingsConfig') || 
+                                 appClassName.includes('PackageConfiguration') ||
+                                 app.id === 'settings-config';
+        
+        if (!isSettingsWindow) return;
+        
+        // Check if buttons already exist to prevent duplicates
+        const searchTarget = app.element || html;
+        if (searchTarget.find('.monarch-settings-buttons').length > 0) {
+            return; // Buttons already exist, skip
+        }
+        
+        // Create our Import/Export buttons
+        const importExportButtons = $(`
+            <div class="monarch-settings-buttons">
+                <button class="monarch-import-settings" type="button">
+                    <i class="fas fa-file-import"></i> Import Settings
+                </button>
+                <button class="monarch-export-settings" type="button">
+                    <i class="fas fa-file-export"></i> Export Settings
+                </button>
+            </div>
+        `);
+        
+        // Find the Reset Defaults button - search in sidebar, html, and app.element
+        // The button might be in the sidebar, window footer, or main content
+        let resetButton = html.find('button.reset-all');
+        if (!resetButton.length && app.element) {
+            resetButton = app.element.find('button.reset-all');
+        }
+        // Also check sidebar specifically
+        if (!resetButton.length) {
+            const sidebar = html.find('aside.sidebar, .sidebar');
+            if (sidebar.length) {
+                resetButton = sidebar.find('button.reset-all');
+            }
+        }
+        if (!resetButton.length && app.element) {
+            const sidebar = app.element.find('aside.sidebar, .sidebar');
+            if (sidebar.length) {
+                resetButton = sidebar.find('button.reset-all');
+            }
+        }
+        
         if (resetButton.length) {
-            // Create our Import/Export buttons
-            const importExportButtons = $(`
-                <div class="monarch-settings-buttons">
-                    <button class="monarch-import-settings" type="button">
-                        <i class="fas fa-file-import"></i> Import Settings
-                    </button>
-                    <button class="monarch-export-settings" type="button">
-                        <i class="fas fa-file-export"></i> Export Settings
-                    </button>
-                </div>
-            `);
-            
             // Insert before the Reset Defaults button
             resetButton.before(importExportButtons);
+        } else {
+            // Try to find window footer first (preferred location)
+            let windowFooter = null;
+            if (app.element) {
+                windowFooter = app.element.find('.window-footer, footer, .form-footer');
+            }
+            if (!windowFooter || !windowFooter.length) {
+                windowFooter = html.find('.window-footer, footer, .form-footer');
+            }
             
-            // Bind event listeners
-            this._activateSettingsWindowListeners(html);
+            if (windowFooter && windowFooter.length) {
+                windowFooter.prepend(importExportButtons);
+            } else {
+                // Try sidebar as fallback
+                let sidebar = html.find('aside.sidebar, .sidebar');
+                if (!sidebar.length && app.element) {
+                    sidebar = app.element.find('aside.sidebar, .sidebar');
+                }
+                if (sidebar.length) {
+                    sidebar.append(importExportButtons);
+                } else {
+                    // Last resort: append to the form element
+                    let form = html.find('form');
+                    if (!form.length && app.element) {
+                        form = app.element.find('form');
+                    }
+                    if (form.length) {
+                        form.append(importExportButtons);
+                    } else {
+                        // Final fallback: append to the window content
+                        if (app.element) {
+                            app.element.append(importExportButtons);
+                        } else {
+                            html.append(importExportButtons);
+                        }
+                    }
+                }
+            }
         }
+        
+        // Bind event listeners - use app.element if available for better coverage
+        const listenerTarget = app.element || html;
+        this._activateSettingsWindowListeners(listenerTarget);
     }
 
     static _activateSettingsWindowListeners(html) {
-        // Import Settings button
-        html.find('.monarch-import-settings').click(async (event) => {
+        // Use event delegation for better cleanup - bind to the html element itself
+        // This ensures listeners are cleaned up when the window closes
+        html.off('click', '.monarch-import-settings').on('click', '.monarch-import-settings', async (event) => {
             event.preventDefault();
             
             const content = `
@@ -299,8 +377,8 @@ class CoffeePubMonarch {
             dialog.render(true);
         });
 
-        // Export Settings button
-        html.find('.monarch-export-settings').click(async (event) => {
+        // Export Settings button - use event delegation
+        html.off('click', '.monarch-export-settings').on('click', '.monarch-export-settings', async (event) => {
             event.preventDefault();
             
             // Use the proven Foundry V12 approach to export ALL settings
@@ -373,6 +451,18 @@ class CoffeePubMonarch {
             // Show success notification
             ui.notifications.info(`All settings exported successfully! (${exportData.totalSettings} settings across ${Object.keys(out).length} namespaces)`);
         });
+    }
+
+    static _onCloseSettingsConfig(app, html) {
+        // Clean up event listeners when settings window closes
+        if (app.element) {
+            app.element.off('click', '.monarch-import-settings');
+            app.element.off('click', '.monarch-export-settings');
+        }
+        if (html) {
+            html.off('click', '.monarch-import-settings');
+            html.off('click', '.monarch-export-settings');
+        }
     }
 
     static _activateListeners(html, app) {
