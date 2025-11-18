@@ -294,18 +294,58 @@ class CoffeePubMonarch {
                                     }
 
                                     // Analyze what will be imported
+                                    // Check modules, systems, and core (which is always available)
                                     const allModules = new Set(game.modules.keys());
+                                    const allSystems = new Set(game.systems?.keys() || []);
+                                    const allAvailable = new Set([...allModules, ...allSystems, 'core']);
+                                    
                                     const importedModules = new Set(Object.keys(importedSettings));
-                                    const missingModules = [...importedModules].filter(id => !allModules.has(id));
-                                    const availableModules = [...importedModules].filter(id => allModules.has(id));
+                                    const missingModules = [...importedModules].filter(id => !allAvailable.has(id));
+                                    const availableModules = [...importedModules].filter(id => allAvailable.has(id));
 
                                     // Check user permissions
                                     const isGM = game.user.isGM;
                                     
+                                    // Sort modules alphabetically by title
+                                    const sortedModules = [...availableModules].sort((a, b) => {
+                                        // Get title from module, system, or use ID
+                                        let titleA, titleB;
+                                        if (a === 'core') {
+                                            titleA = 'Core';
+                                        } else if (game.modules.has(a)) {
+                                            titleA = game.modules.get(a)?.title || a;
+                                        } else if (game.systems?.has(a)) {
+                                            titleA = game.systems.get(a)?.title || a;
+                                        } else {
+                                            titleA = a;
+                                        }
+                                        
+                                        if (b === 'core') {
+                                            titleB = 'Core';
+                                        } else if (game.modules.has(b)) {
+                                            titleB = game.modules.get(b)?.title || b;
+                                        } else if (game.systems?.has(b)) {
+                                            titleB = game.systems.get(b)?.title || b;
+                                        } else {
+                                            titleB = b;
+                                        }
+                                        
+                                        return titleA.localeCompare(titleB);
+                                    });
+                                    
                                     // Show preview dialog with module checkboxes
-                                    const moduleCheckboxes = availableModules.map(moduleId => {
-                                        const module = game.modules.get(moduleId);
-                                        const moduleTitle = module?.title || moduleId;
+                                    const moduleCheckboxes = sortedModules.map(moduleId => {
+                                        // Get title from module, system, or use ID
+                                        let moduleTitle;
+                                        if (moduleId === 'core') {
+                                            moduleTitle = 'Core';
+                                        } else if (game.modules.has(moduleId)) {
+                                            moduleTitle = game.modules.get(moduleId)?.title || moduleId;
+                                        } else if (game.systems?.has(moduleId)) {
+                                            moduleTitle = game.systems.get(moduleId)?.title || moduleId;
+                                        } else {
+                                            moduleTitle = moduleId;
+                                        }
                                         return `<label class="checkbox" style="display: block; margin: 0.25em 0;">
                                             <input type="checkbox" name="importModule" value="${moduleId}" class="module-import-checkbox" checked>
                                             ${moduleTitle}
@@ -389,7 +429,12 @@ class CoffeePubMonarch {
                                                                 continue;
                                                             }
                                                             
-                                                            if (game.modules.has(moduleId)) {
+                                                            // Check if module, system, or core exists
+                                                            const moduleExists = game.modules.has(moduleId) || 
+                                                                                game.systems?.has(moduleId) || 
+                                                                                moduleId === 'core';
+                                                            
+                                                            if (moduleExists) {
                                                                 for (const [settingKey, settingData] of Object.entries(moduleSettings)) {
                                                                     try {
                                                                         // Check if setting exists - settings registry uses "namespace.key" format
@@ -431,9 +476,23 @@ class CoffeePubMonarch {
                                                                             continue;
                                                                         }
                                                                         
+                                                                        // Prepare the value to import
+                                                                        let valueToImport = settingData.value;
+                                                                        
+                                                                        // Handle empty strings for settings that might expect JSON
+                                                                        // Some modules (like Torch) expect JSON strings but validation fails on empty strings
+                                                                        // Check if setting name suggests it might be JSON-related
+                                                                        const jsonLikeKeys = ['gameLightSources', 'sources', 'config', 'json', 'data', 'settings'];
+                                                                        const mightBeJson = jsonLikeKeys.some(key => settingKey.toLowerCase().includes(key.toLowerCase()));
+                                                                        
+                                                                        if (typeof valueToImport === 'string' && valueToImport === '' && mightBeJson) {
+                                                                            // Use empty JSON object instead of empty string for JSON-expected settings
+                                                                            valueToImport = '{}';
+                                                                        }
+                                                                        
                                                                         // Import the setting - only use the value, let the module handle validation
                                                                         // Foundry and the module will validate the value when we set it
-                                                                        await game.settings.set(moduleId, settingKey, settingData.value);
+                                                                        await game.settings.set(moduleId, settingKey, valueToImport);
                                                                         importedCount++;
                                                                         if (isWorldScoped) worldScopedCount++;
                                                                         if (isClientScoped) clientScopedCount++;
