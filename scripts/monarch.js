@@ -296,8 +296,33 @@ class CoffeePubMonarch {
                                     // Analyze what will be imported
                                     // Check modules, systems, and core (which is always available)
                                     const allModules = new Set(game.modules.keys());
-                                    const allSystems = new Set(game.systems?.keys() || []);
-                                    const allAvailable = new Set([...allModules, ...allSystems, 'core']);
+                                    const allSystems = new Set();
+                                    
+                                    // Get all system IDs - game.systems is a Map of all installed systems
+                                    if (game.systems) {
+                                        for (const [systemId, system] of game.systems) {
+                                            allSystems.add(systemId);
+                                        }
+                                    }
+                                    
+                                    // Also check the active system (game.system.id)
+                                    if (game.system?.id) {
+                                        allSystems.add(game.system.id);
+                                    }
+                                    
+                                    // Also check settings registry - if a namespace has settings, it exists
+                                    // This catches systems/modules that might not be in game.systems or game.modules
+                                    const namespacesWithSettings = new Set();
+                                    if (game.settings?.settings) {
+                                        for (const fullKey of game.settings.settings.keys()) {
+                                            const [namespace] = fullKey.split(".", 2);
+                                            if (namespace && namespace !== 'core') {
+                                                namespacesWithSettings.add(namespace);
+                                            }
+                                        }
+                                    }
+                                    
+                                    const allAvailable = new Set([...allModules, ...allSystems, ...namespacesWithSettings, 'core']);
                                     
                                     const importedModules = new Set(Object.keys(importedSettings));
                                     const missingModules = [...importedModules].filter(id => !allAvailable.has(id));
