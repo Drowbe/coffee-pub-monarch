@@ -35,11 +35,11 @@ This module requires migration from jQuery-based DOM manipulation to native DOM 
 - [x] Compatibility block set to v13 minimum/verified/maximum
 - [x] Migration guide reviewed
 
-### ❌ Not Completed
-- [ ] jQuery usage removed
-- [ ] Hook parameters updated for native DOM
-- [ ] Event handlers converted
-- [ ] Testing in v13 environment
+### ✅ Completed
+- [x] jQuery usage removed
+- [x] Hook parameters updated for native DOM
+- [x] Event handlers converted
+- [x] Testing in v13 environment (ongoing)
 
 ---
 
@@ -460,40 +460,44 @@ openWindows.forEach((window) => {
 - [ ] Create feature branch: `v13-migration`
 
 ### Phase 1: Code Audit
-- [ ] Complete jQuery usage audit
-- [ ] Document all affected hooks
-- [ ] Document all event handlers
-- [ ] Create test cases for each feature
+- [x] Complete jQuery usage audit
+- [x] Document all affected hooks
+- [x] Document all event handlers
+- [x] Create test cases for each feature
 
 ### Phase 2: Core Migration (monarch.js)
-- [ ] Update `renderModuleManagement` hook
-- [ ] Update `renderSettingsConfig` / `renderExtendedSettingsConfig` hooks
-- [ ] Update `renderDialog` hook
-- [ ] Update `closeSettingsConfig` hooks
-- [ ] Replace all jQuery selectors
-- [ ] Replace all jQuery iteration
-- [ ] Replace all DOM manipulation
-- [ ] Replace all event handlers
-- [ ] Replace all attribute/property access
-- [ ] Replace data storage
-- [ ] Replace select element manipulation
-- [ ] Fix HTML string creation
+- [x] Update `renderModuleManagement` hook
+- [x] Update `renderSettingsConfig` / `renderExtendedSettingsConfig` hooks
+- [x] Update `renderDialog` hook
+- [x] Update `closeSettingsConfig` hooks
+- [x] Replace all jQuery selectors
+- [x] Replace all jQuery iteration
+- [x] Replace all DOM manipulation
+- [x] Replace all event handlers
+- [x] Replace all attribute/property access
+- [x] Replace data storage (using WeakMap)
+- [x] Replace select element manipulation
+- [x] Fix HTML string creation
+- [x] Fix Dialog callback `html` parameter handling
+- [x] Fix Dialog `render` hook `html` parameter handling
+- [x] Fix v13 DOM structure changes (search element, no form element)
+- [x] Fix form data access in Dialog callbacks
 
 ### Phase 3: Application Migration (search-and-replace.js)
-- [ ] Update `activateListeners` method
-- [ ] Update `_renderInner` method
-- [ ] Replace all jQuery usage in helper methods
+- [x] Update `activateListeners` method
+- [x] Update `_renderInner` method
+- [x] Replace all jQuery usage in helper methods
 
 ### Phase 4: Macro Migration (replace-name.js)
-- [ ] Update Dialog callbacks
-- [ ] Replace window finding logic
-- [ ] Replace all jQuery usage
+- [x] Update Dialog callbacks
+- [x] Replace window finding logic
+- [x] Replace all jQuery usage
 
 ### Phase 5: Testing
-- [ ] Critical path testing
-- [ ] Functionality testing
-- [ ] Edge case testing
-- [ ] Integration testing
+- [x] Critical path testing (module management window, settings window)
+- [x] Functionality testing (save/load module sets, import/export)
+- [ ] Edge case testing (ongoing)
+- [ ] Integration testing (ongoing)
 - [ ] Performance testing
 
 ### Post-Migration
@@ -501,6 +505,85 @@ openWindows.forEach((window) => {
 - [ ] Update README.md if needed
 - [ ] Create release notes
 - [ ] Tag and release v13.0.0
+
+---
+
+## Migration Progress Summary
+
+**Status:** ✅ **Core Migration Complete** - Module is functional in FoundryVTT v13
+
+### Completed Work
+
+1. **Phase 1: Code Audit** ✅
+   - Documented all jQuery usage across all files
+   - Created comprehensive migration plan
+
+2. **Phase 2: Core Migration (monarch.js)** ✅
+   - Removed all jQuery usage (~220+ instances)
+   - Updated all hooks to use native DOM APIs
+   - Fixed v13 DOM structure changes:
+     - Module management window structure (search element, no form)
+     - Dialog callback parameter handling
+     - Dialog render hook parameter handling
+   - Replaced jQuery event handlers with native addEventListener
+   - Replaced jQuery data storage with WeakMap
+   - Fixed form data access in Dialog callbacks
+
+3. **Phase 3: Application Migration (search-and-replace.js)** ✅
+   - Removed all jQuery usage
+   - Converted to native DOM APIs
+
+4. **Phase 4: Macro Migration (replace-name.js)** ✅
+   - Removed all jQuery usage
+   - Converted to native DOM APIs
+
+5. **Phase 5: Testing** 🔄 (In Progress)
+   - ✅ Module loads without errors
+   - ✅ Module management window renders correctly
+   - ✅ Settings window renders correctly
+   - ✅ Save new module set works
+   - ✅ Load module set works
+   - ✅ Import/Export module sets works
+   - ✅ Import/Export settings works
+   - ⏳ Edge case testing (ongoing)
+   - ⏳ Integration testing (ongoing)
+
+### Issues Found and Fixed During Testing
+
+1. **Module Management Window Not Showing Controls**
+   - **Issue:** v13 changed DOM structure (search element instead of filter input, no form element)
+   - **Fix:** Updated selectors to use `search.flexrow` and proper insertion points
+
+2. **Dialog Callback Errors**
+   - **Issue:** `html.querySelector is not a function` in Dialog callbacks
+   - **Fix:** Added safety checks to handle different `html` parameter types
+
+3. **Dialog Render Hook Errors**
+   - **Issue:** `html.querySelector is not a function` in Dialog render hooks
+   - **Fix:** Added safety checks and proper element unwrapping
+
+4. **Import File Format Confusion**
+   - **Issue:** Users trying to import module sets into settings import
+   - **Fix:** Added better error messages detecting wrong file types
+
+5. **Save New Module Set Not Working**
+   - **Issue:** Form data access using `form.setName.value` doesn't work in v13
+   - **Fix:** Changed to use `querySelector('input[name="setName"]').value`
+
+### Remaining Work
+
+1. **Testing** (Ongoing)
+   - Edge case testing (empty sets, large numbers of modules, error handling)
+   - Integration testing with other v13 modules
+   - Performance testing
+
+2. **Documentation**
+   - Update CHANGELOG.md with v13 migration notes
+   - Update README.md if needed
+   - Create release notes for v13.0.0
+
+3. **Release**
+   - Tag and release v13.0.0
 
 ---
 

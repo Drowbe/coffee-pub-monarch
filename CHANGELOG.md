@@ -5,9 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [13.0.0] - BEGIN VERSION 13 RELEASES
-- Initial release for Foundry v13
-- Non-functional
+## [13.0.0] - FoundryVTT v13 Migration
+
+### Breaking Changes
+- **jQuery Removal**: All jQuery usage has been removed and replaced with native DOM APIs for FoundryVTT v13 compatibility
+- **DOM Structure Changes**: Updated to work with v13's new module management window structure (search element, no form element)
+
+### Changed
+- **Module Management Window**: Updated to work with v13 DOM structure (uses `search.flexrow` instead of filter input)
+- **Dialog Callbacks**: Fixed Dialog callback `html` parameter handling for v13 compatibility
+- **Dialog Render Hooks**: Fixed Dialog `render` hook `html` parameter handling
+- **Form Data Access**: Changed from `form.property.value` to `querySelector` for proper v13 compatibility
+- **Event Handlers**: All jQuery event handlers converted to native `addEventListener`
+- **Data Storage**: Replaced jQuery `.data()` with `WeakMap` for event handler storage
+- **DOM Manipulation**: All jQuery DOM methods replaced with native equivalents
+
+### Fixed
+- Module set controls now appear correctly in v13 module management window
+- Save new module set functionality now works correctly
+- Import/Export module sets functionality works correctly
+- Import/Export settings functionality works correctly
+- Dialog callbacks no longer throw `querySelector is not a function` errors
+- Better error messages for wrong file type imports (module sets vs settings)
+
+### Technical Details
+- Removed ~220+ jQuery usages across all files
+- Updated all hooks (`renderModuleManagement`, `renderSettingsConfig`, `renderDialog`, etc.)
+- Converted all event delegation to native DOM APIs
+- Fixed v13-specific DOM structure changes
 
 ## [12.1.3] - FINAL VERSION 12 RELEASE
 - This is the final release for Foundry v12
