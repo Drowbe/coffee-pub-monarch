@@ -2,6 +2,11 @@
 
 A FoundryVTT module that allows you to save and load different sets of module configurations. Perfect for switching between different game systems or play styles that require different sets of modules.
 
+## PLEASE NOTE
+
+Version 12.1.3 is the final release for Foundry v12. All subsequent releases will be for v13+.
+
+
 ### Module Management Interface
 ![Module Interface](product/module-interface.png)
 
