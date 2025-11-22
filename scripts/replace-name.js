@@ -58,7 +58,7 @@ let replaceDialog = new Dialog({
  
  <label style="${labelStyle}" for="nowNamed" title="Will the actor's item descriptions now use a proper name? i.e. 'Juliet' instead of 'soldier'">Now Named?</label><select style="${selectStyle}" id="nowNamed" name="nowNamed"><option value="no">No</option><option value="yes">Yes</option></select>
  
-<h3 style="margin:4px 1%;" onclick="$('#replaceAdditional').slideToggle('slow');">Toggle Additional Options <span style="float: right">⇅</span></h3><div id="replaceAdditional" style="${additionalStyle}">
+<h3 style="margin:4px 1%; cursor: pointer;" onclick="(function(){const el = document.getElementById('replaceAdditional'); if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';})();">Toggle Additional Options <span style="float: right">⇅</span></h3><div id="replaceAdditional" style="${additionalStyle}">
  
  <label style="${labelStyle}" for="oldDC">Old DC:</label><input type="text" style="${selectStyle}" id="oldDC" name="oldDC" value="{dc}" list="oldDCList"><datalist id="oldDCList" name="oldDC"><option value="@spelldc"></datalist></input>
  
@@ -86,21 +86,33 @@ let replaceDialog = new Dialog({
             icon: '<i class="fas fa-feather"></i>',
             label: "Edit Desc.",
             callback: async (html) => {
-
-                let charUuid = html.find('select#characters').val();
-                let oldName1 = html.find('input#oldName').val();
-                let oldName2 = html.find('input#oldName').val();
-                let newName = html.find('input#newName').val();
-                let oldDC = html.find('input#oldDC').val();
-                let newDC = html.find('input#newDC').val();
-                let oldStat = html.find('input#oldStat').val();
-                let newStat = html.find('input#newStat').val();
-                let oldAttack = html.find('input#oldAttack').val();
-                let newAttack = html.find('input#newAttack').val();
-                const oldNamed = html.find('select#wasNamed').val();
-                const newNamed = html.find('select#nowNamed').val();
-                const oldPronouns = html.find('input#oldPronouns').val();
-                const newPronouns = html.find('input#newPronouns').val();
+                const charSelect = html.querySelector('select#characters');
+                let charUuid = charSelect ? charSelect.value : '';
+                const oldNameInput = html.querySelector('input#oldName');
+                let oldName1 = oldNameInput ? oldNameInput.value : '';
+                let oldName2 = oldNameInput ? oldNameInput.value : '';
+                const newNameInput = html.querySelector('input#newName');
+                let newName = newNameInput ? newNameInput.value : '';
+                const oldDCInput = html.querySelector('input#oldDC');
+                let oldDC = oldDCInput ? oldDCInput.value : '';
+                const newDCInput = html.querySelector('input#newDC');
+                let newDC = newDCInput ? newDCInput.value : '';
+                const oldStatInput = html.querySelector('input#oldStat');
+                let oldStat = oldStatInput ? oldStatInput.value : '';
+                const newStatInput = html.querySelector('input#newStat');
+                let newStat = newStatInput ? newStatInput.value : '';
+                const oldAttackInput = html.querySelector('input#oldAttack');
+                let oldAttack = oldAttackInput ? oldAttackInput.value : '';
+                const newAttackInput = html.querySelector('input#newAttack');
+                let newAttack = newAttackInput ? newAttackInput.value : '';
+                const wasNamedSelect = html.querySelector('select#wasNamed');
+                const oldNamed = wasNamedSelect ? wasNamedSelect.value : 'no';
+                const nowNamedSelect = html.querySelector('select#nowNamed');
+                const newNamed = nowNamedSelect ? nowNamedSelect.value : 'no';
+                const oldPronounsInput = html.querySelector('input#oldPronouns');
+                const oldPronouns = oldPronounsInput ? oldPronounsInput.value : '';
+                const newPronounsInput = html.querySelector('input#newPronouns');
+                const newPronouns = newPronounsInput ? newPronounsInput.value : '';
                 let selected;
 
                 if (!oldName1 && !oldDC && !oldStat && !oldAttack && !oldPronouns) {
@@ -116,14 +128,13 @@ let replaceDialog = new Dialog({
                 } else {
 
                     if (charUuid === "focused") {
-
-                        const openWindows = $('.app.window-app.sheet.actor.npc');
+                        const openWindows = document.querySelectorAll('.app.window-app.sheet.actor.npc');
                         let best;
                         let maxz;
-                        openWindows.each(function() {
-                            let z = parseInt($(this).css('z-index'), 10);
+                        openWindows.forEach((window) => {
+                            const z = parseInt(getComputedStyle(window).zIndex, 10) || 0;
                             if (!best || maxz < z) {
-                                best = this;
+                                best = window;
                                 maxz = z;
                             }
                         });
@@ -272,19 +283,18 @@ let replaceDialog = new Dialog({
             icon: '<i class="fas fa-signature"></i>',
             label: 'Clean Names',
             callback: async (html) => {
-
-                let charUuid = html.find('select#characters').val();
+                const charSelect = html.querySelector('select#characters');
+                let charUuid = charSelect ? charSelect.value : '';
                 let selected;
 
                 if (charUuid === "focused") {
-
-                    const openWindows = $('.app.window-app.sheet.actor.npc');
+                    const openWindows = document.querySelectorAll('.app.window-app.sheet.actor.npc');
                     let best;
                     let maxz;
-                    openWindows.each(function() {
-                        let z = parseInt($(this).css('z-index'), 10);
+                    openWindows.forEach((window) => {
+                        const z = parseInt(getComputedStyle(window).zIndex, 10) || 0;
                         if (!best || maxz < z) {
-                            best = this;
+                            best = window;
                             maxz = z;
                         }
                     });

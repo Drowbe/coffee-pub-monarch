@@ -16,6 +16,9 @@ class CoffeePubMonarch {
         moduleSetControls: `modules/${this.ID}/templates/monarch-controls.hbs`
     };
 
+    // WeakMap for storing handler functions on DOM elements (replaces jQuery .data())
+    static _handlerStorage = new WeakMap();
+
     static initialize() {
         // Register module settings
         game.settings.register(this.ID, 'moduleSets', {
@@ -42,19 +45,19 @@ class CoffeePubMonarch {
         Hooks.on('renderDialog', (dialog, html) => {
             if (dialog.data.title === "Manage Module Dependencies") {
                 // Find the confirm button and add our listener
-                const confirmBtn = html.find('button.yes');
-                if (confirmBtn.length) {
-                    confirmBtn.on('click', () => {
+                const confirmBtn = html.querySelector('button.yes');
+                if (confirmBtn) {
+                    confirmBtn.addEventListener('click', () => {
                         // Use setTimeout to ensure the module states have been updated
                         setTimeout(() => {
                             // Find the module management window
                             const moduleManager = document.querySelector('#module-management');
                             if (!moduleManager) return;
                             
-                            // Get our stored event handlers
-                            const $html = $(moduleManager);
-                            const updateCurrentStateHighlight = $html.data('updateCurrentStateHighlight');
-                            const updateButtonVisibility = $html.data('updateButtonVisibility');
+                            // Get our stored event handlers from WeakMap
+                            const handlers = this._handlerStorage.get(moduleManager);
+                            const updateCurrentStateHighlight = handlers?.updateCurrentStateHighlight;
+                            const updateButtonVisibility = handlers?.updateButtonVisibility;
                             
                             // Update our UI if we have the handlers
                             if (updateCurrentStateHighlight) updateCurrentStateHighlight();
@@ -88,8 +91,8 @@ class CoffeePubMonarch {
         
         // Store initial module states
         const initialModuleStates = new Map();
-        html.find('input[type="checkbox"]').each(function() {
-            initialModuleStates.set(this.name, this.checked);
+        html.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+            initialModuleStates.set(checkbox.name, checkbox.checked);
         });
         
         // Get current active modules
@@ -99,27 +102,50 @@ class CoffeePubMonarch {
         let matchingSet = '';
         for (const [setName, moduleList] of Object.entries(moduleSets)) {
             if (moduleList.length === currentActiveModules.length && 
-                moduleList.every(id => currentActiveModules.includes(id)) &&
+                moduleList.every(id => currentActiveModules.includes(id)) && 
                 currentActiveModules.every(id => moduleList.includes(id))) {
                 matchingSet = setName;
                 break;
             }
         }
         
-        const moduleSetControls = await renderTemplate(this.TEMPLATES.moduleSetControls, {
+        const moduleSetControlsHTML = await renderTemplate(this.TEMPLATES.moduleSetControls, {
             moduleSets,
             currentSet: matchingSet,
             localize: (key) => game.i18n.localize(`${this.ID}.moduleSet.${key}`)
         });
         
-        // Insert our controls after the filter input
-        const filterInput = html.find('input[name="filter"]');
-        if (filterInput.length) {
-            $(moduleSetControls).insertAfter(filterInput.parent());
+        // Convert HTML string to DOM element
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = moduleSetControlsHTML;
+        const moduleSetControls = tempDiv.firstElementChild;
+        
+        if (!moduleSetControls) {
+            console.error("COFFEE PUB • MONARCH | Failed to create module set controls element");
+            return;
+        }
+        
+        // Insert our controls after the search/filter element
+        // In v13, the filter is in a <search> element, not a form input with name="filter"
+        const searchElement = html.querySelector('search.flexrow');
+        if (searchElement) {
+            // Insert after the search element
+            searchElement.insertAdjacentElement('afterend', moduleSetControls);
         } else {
-            // Fallback: insert at the top of the form
-            const form = html.find('form');
-            form.prepend(moduleSetControls);
+            // Fallback: try to find the search input directly
+            const searchInput = html.querySelector('input[type="search"]');
+            if (searchInput) {
+                const searchParent = searchInput.closest('search') || searchInput.parentElement;
+                if (searchParent) {
+                    searchParent.insertAdjacentElement('afterend', moduleSetControls);
+                } else {
+                    // Insert after the search input's parent
+                    searchInput.parentElement?.insertAdjacentElement('afterend', moduleSetControls);
+                }
+            } else {
+                // Final fallback: insert at the top of the window content (html is already the window-content)
+                html.insertBefore(moduleSetControls, html.firstChild);
+            }
         }
 
         // Bind our event listeners
@@ -140,79 +166,84 @@ class CoffeePubMonarch {
         
         // Check if buttons already exist to prevent duplicates
         const searchTarget = app.element || html;
-        if (searchTarget.find('.monarch-settings-buttons').length > 0) {
+        if (searchTarget.querySelector('.monarch-settings-buttons')) {
             return; // Buttons already exist, skip
         }
         
         // Create our Import/Export buttons
-        const importExportButtons = $(`
-            <div class="monarch-settings-buttons">
-                <button class="monarch-import-settings" type="button">
-                    <i class="fas fa-file-import"></i> Import Settings
-                </button>
-                <button class="monarch-export-settings" type="button">
-                    <i class="fas fa-file-export"></i> Export Settings
-                </button>
-            </div>
-        `);
+        const importExportButtons = document.createElement('div');
+        importExportButtons.className = 'monarch-settings-buttons';
+        
+        const importBtn = document.createElement('button');
+        importBtn.className = 'monarch-import-settings';
+        importBtn.type = 'button';
+        importBtn.innerHTML = '<i class="fas fa-file-import"></i> Import Settings';
+        
+        const exportBtn = document.createElement('button');
+        exportBtn.className = 'monarch-export-settings';
+        exportBtn.type = 'button';
+        exportBtn.innerHTML = '<i class="fas fa-file-export"></i> Export Settings';
+        
+        importExportButtons.appendChild(importBtn);
+        importExportButtons.appendChild(exportBtn);
         
         // Find the Reset Defaults button - search in sidebar, html, and app.element
         // The button might be in the sidebar, window footer, or main content
-        let resetButton = html.find('button.reset-all');
-        if (!resetButton.length && app.element) {
-            resetButton = app.element.find('button.reset-all');
+        let resetButton = html.querySelector('button.reset-all');
+        if (!resetButton && app.element) {
+            resetButton = app.element.querySelector('button.reset-all');
         }
         // Also check sidebar specifically
-        if (!resetButton.length) {
-            const sidebar = html.find('aside.sidebar, .sidebar');
-            if (sidebar.length) {
-                resetButton = sidebar.find('button.reset-all');
+        if (!resetButton) {
+            const sidebar = html.querySelector('aside.sidebar, .sidebar');
+            if (sidebar) {
+                resetButton = sidebar.querySelector('button.reset-all');
             }
         }
-        if (!resetButton.length && app.element) {
-            const sidebar = app.element.find('aside.sidebar, .sidebar');
-            if (sidebar.length) {
-                resetButton = sidebar.find('button.reset-all');
+        if (!resetButton && app.element) {
+            const sidebar = app.element.querySelector('aside.sidebar, .sidebar');
+            if (sidebar) {
+                resetButton = sidebar.querySelector('button.reset-all');
             }
         }
         
-        if (resetButton.length) {
+        if (resetButton) {
             // Insert before the Reset Defaults button
-            resetButton.before(importExportButtons);
+            resetButton.insertAdjacentElement('beforebegin', importExportButtons);
         } else {
             // Try to find window footer first (preferred location)
             let windowFooter = null;
             if (app.element) {
-                windowFooter = app.element.find('.window-footer, footer, .form-footer');
+                windowFooter = app.element.querySelector('.window-footer, footer, .form-footer');
             }
-            if (!windowFooter || !windowFooter.length) {
-                windowFooter = html.find('.window-footer, footer, .form-footer');
+            if (!windowFooter) {
+                windowFooter = html.querySelector('.window-footer, footer, .form-footer');
             }
             
-            if (windowFooter && windowFooter.length) {
-                windowFooter.prepend(importExportButtons);
+            if (windowFooter) {
+                windowFooter.insertBefore(importExportButtons, windowFooter.firstChild);
             } else {
                 // Try sidebar as fallback
-                let sidebar = html.find('aside.sidebar, .sidebar');
-                if (!sidebar.length && app.element) {
-                    sidebar = app.element.find('aside.sidebar, .sidebar');
+                let sidebar = html.querySelector('aside.sidebar, .sidebar');
+                if (!sidebar && app.element) {
+                    sidebar = app.element.querySelector('aside.sidebar, .sidebar');
                 }
-                if (sidebar.length) {
-                    sidebar.append(importExportButtons);
+                if (sidebar) {
+                    sidebar.appendChild(importExportButtons);
                 } else {
                     // Last resort: append to the form element
-                    let form = html.find('form');
-                    if (!form.length && app.element) {
-                        form = app.element.find('form');
+                    let form = html.querySelector('form');
+                    if (!form && app.element) {
+                        form = app.element.querySelector('form');
                     }
-                    if (form.length) {
-                        form.append(importExportButtons);
+                    if (form) {
+                        form.appendChild(importExportButtons);
                     } else {
                         // Final fallback: append to the window content
                         if (app.element) {
-                            app.element.append(importExportButtons);
+                            app.element.appendChild(importExportButtons);
                         } else {
-                            html.append(importExportButtons);
+                            html.appendChild(importExportButtons);
                         }
                     }
                 }
@@ -227,7 +258,10 @@ class CoffeePubMonarch {
     static _activateSettingsWindowListeners(html) {
         // Use event delegation for better cleanup - bind to the html element itself
         // This ensures listeners are cleaned up when the window closes
-        html.off('click', '.monarch-import-settings').on('click', '.monarch-import-settings', async (event) => {
+        // Store handler references for cleanup
+        const importHandler = async (event) => {
+            if (!event.target.matches('.monarch-import-settings') && !event.target.closest('.monarch-import-settings')) return;
+            event.preventDefault();
             event.preventDefault();
             
             // Check user permissions
@@ -274,13 +308,26 @@ class CoffeePubMonarch {
                         icon: '<i class="fas fa-file-import"></i>',
                         label: "Import",
                         callback: async (html) => {
-                            const fileInput = html.find('input[type="file"]')[0];
+                            // In v13, Dialog callbacks receive the form element
+                            // Ensure html is a DOM element (it should be, but add safety check)
+                            let form = html;
+                            if (!(html instanceof HTMLElement)) {
+                                // Try to unwrap if it's a jQuery object or array-like
+                                form = html?.[0] || html;
+                            }
+                            // If still not an HTMLElement, try to find the form
+                            if (!(form instanceof HTMLElement)) {
+                                form = document.querySelector('form') || html;
+                            }
+                            
+                            const fileInput = form.querySelector('input[type="file"]');
+                            if (!fileInput) return;
                             const file = fileInput.files[0];
                             if (!file) return;
 
                             // Get checkbox values from the file selection dialog
-                            const importWorldSettings = html.find('#importWorldSettings').is(':checked');
-                            const importClientSettings = html.find('#importClientSettings').is(':checked');
+                            const importWorldSettings = form.querySelector('#importWorldSettings')?.checked || false;
+                            const importClientSettings = form.querySelector('#importClientSettings')?.checked || false;
 
                             try {
                                 const reader = new FileReader();
@@ -416,12 +463,22 @@ class CoffeePubMonarch {
                                         content: previewContent,
                                         render: (html) => {
                                             // Add event handlers for Select All/None buttons
-                                            html.find('.select-all-modules').click(() => {
-                                                html.find('.module-import-checkbox').prop('checked', true);
-                                            });
-                                            html.find('.select-none-modules').click(() => {
-                                                html.find('.module-import-checkbox').prop('checked', false);
-                                            });
+                                            const selectAllBtn = html.querySelector('.select-all-modules');
+                                            if (selectAllBtn) {
+                                                selectAllBtn.addEventListener('click', () => {
+                                                    html.querySelectorAll('.module-import-checkbox').forEach(checkbox => {
+                                                        checkbox.checked = true;
+                                                    });
+                                                });
+                                            }
+                                            const selectNoneBtn = html.querySelector('.select-none-modules');
+                                            if (selectNoneBtn) {
+                                                selectNoneBtn.addEventListener('click', () => {
+                                                    html.querySelectorAll('.module-import-checkbox').forEach(checkbox => {
+                                                        checkbox.checked = false;
+                                                    });
+                                                });
+                                            }
                                         },
                                         buttons: {
                                             proceed: {
@@ -429,10 +486,18 @@ class CoffeePubMonarch {
                                                 label: "Proceed with Import",
                                                 callback: async (html) => {
                                                     try {
+                                                        // In v13, Dialog callbacks receive the form element
+                                                        let form = html;
+                                                        if (!(html instanceof HTMLElement)) {
+                                                            form = html?.[0] || html;
+                                                        }
+                                                        if (!(form instanceof HTMLElement)) {
+                                                            form = document.querySelector('form') || html;
+                                                        }
                                                         // Get selected modules from checkboxes
                                                         const selectedModules = new Set();
-                                                        html.find('.module-import-checkbox:checked').each(function() {
-                                                            selectedModules.add(this.value);
+                                                        form.querySelectorAll('.module-import-checkbox:checked').forEach(checkbox => {
+                                                            selectedModules.add(checkbox.value);
                                                         });
                                                         
                                                         // Use the checkbox values from the file selection dialog
@@ -629,10 +694,21 @@ class CoffeePubMonarch {
                 default: "import"
             });
             dialog.render(true);
-        });
-
-        // Export Settings button - use event delegation
-        html.off('click', '.monarch-export-settings').on('click', '.monarch-export-settings', async (event) => {
+        };
+        
+        // Remove old listeners if they exist (stored in WeakMap)
+        const oldHandlers = this._handlerStorage.get(html);
+        if (oldHandlers?.importHandler) {
+            html.removeEventListener('click', oldHandlers.importHandler);
+        }
+        
+        // Add new listener
+        html.addEventListener('click', importHandler);
+        
+        // Store handler for cleanup
+        const exportHandler = async (event) => {
+            if (!event.target.matches('.monarch-export-settings') && !event.target.closest('.monarch-export-settings')) return;
+            event.preventDefault();
             event.preventDefault();
             
             // Use the proven Foundry V12 approach to export ALL settings
@@ -704,58 +780,82 @@ class CoffeePubMonarch {
             
             // Show success notification
             ui.notifications.info(`All settings exported successfully! (${exportData.totalSettings} settings across ${Object.keys(out).length} namespaces)`);
-        });
+        };
+        
+        // Remove old export listener if it exists
+        if (oldHandlers?.exportHandler) {
+            html.removeEventListener('click', oldHandlers.exportHandler);
+        }
+        
+        // Add new export listener
+        html.addEventListener('click', exportHandler);
+        
+        // Store both handlers for cleanup
+        this._handlerStorage.set(html, { importHandler, exportHandler });
     }
 
     static _onCloseSettingsConfig(app, html) {
         // Clean up event listeners when settings window closes
-        if (app.element) {
-            app.element.off('click', '.monarch-import-settings');
-            app.element.off('click', '.monarch-export-settings');
-        }
-        if (html) {
-            html.off('click', '.monarch-import-settings');
-            html.off('click', '.monarch-export-settings');
-        }
+        const targets = [];
+        if (app.element) targets.push(app.element);
+        if (html) targets.push(html);
+        
+        targets.forEach(target => {
+            const handlers = this._handlerStorage.get(target);
+            if (handlers) {
+                if (handlers.importHandler) {
+                    target.removeEventListener('click', handlers.importHandler);
+                }
+                if (handlers.exportHandler) {
+                    target.removeEventListener('click', handlers.exportHandler);
+                }
+                // Clear from storage
+                this._handlerStorage.delete(target);
+            }
+        });
     }
 
     static _activateListeners(html, app) {
         // Store initial module states
         const initialModuleStates = new Map();
-        html.find('input[type="checkbox"]').each(function() {
-            initialModuleStates.set(this.name, this.checked);
+        html.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+            initialModuleStates.set(checkbox.name, checkbox.checked);
         });
 
         // Function to update current state highlighting
         const updateCurrentStateHighlight = () => {
-            html.find('input[type="checkbox"]').each(function() {
-                const moduleId = this.name;
+            html.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+                const moduleId = checkbox.name;
                 const initialState = initialModuleStates.get(moduleId);
-                const currentState = this.checked;
-                const packageElem = $(this).closest('.package');
+                const currentState = checkbox.checked;
+                const packageElem = checkbox.closest('.package');
+                
+                if (!packageElem) return;
                 
                 // Remove current change highlight if it exists
-                packageElem.removeClass('module-current-change');
+                packageElem.classList.remove('module-current-change');
                 
                 // Add highlight if changed from initial state
                 if (initialState !== currentState) {
-                    packageElem.addClass('module-current-change');
+                    packageElem.classList.add('module-current-change');
                 }
             });
         };
 
         // Function to check for changes and update button visibility
         const updateButtonVisibility = () => {
-            const setName = html.find('.load-module-set').val();
+            const setNameSelect = html.querySelector('.load-module-set');
+            const setName = setNameSelect ? setNameSelect.value : '';
             if (!setName) {
-                html.find('.update-module-set').hide();
+                const updateBtn = html.querySelector('.update-module-set');
+                if (updateBtn) updateBtn.style.display = 'none';
                 return;
             }
 
             // Get current checked modules from the form
             const currentModules = [];
-            html.find('input[type="checkbox"]').each(function() {
-                if (this.checked) currentModules.push(this.name);
+            html.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+                if (checkbox.checked) currentModules.push(checkbox.name);
             });
 
             // Compare with selected set
@@ -766,125 +866,168 @@ class CoffeePubMonarch {
                 currentModules.every(id => moduleSet.includes(id));
 
             // Show update button if there are changes
-            html.find('.update-module-set').toggle(!isCurrentState);
+            const updateBtn = html.querySelector('.update-module-set');
+            if (updateBtn) {
+                updateBtn.style.display = isCurrentState ? 'none' : '';
+            }
         };
 
         // Store the highlight update function so we can access it from hooks
-        html.closest('#module-management').data('updateCurrentStateHighlight', updateCurrentStateHighlight);
-        html.closest('#module-management').data('updateButtonVisibility', updateButtonVisibility);
+        // In v13, html is the window-content section, use app.element for the window
+        const moduleManager = app.element || document.querySelector('#module-management') || html;
+        if (moduleManager) {
+            this._handlerStorage.set(moduleManager, {
+                updateCurrentStateHighlight,
+                updateButtonVisibility
+            });
+        }
 
         // Add change handler to all checkboxes for both update button and highlighting
-        const form = html.closest('#module-management');
-        form.on('change', 'input[type="checkbox"]', function() {
-            updateButtonVisibility();
-            updateCurrentStateHighlight();
-        });
+        // Use the window content section as the container for event delegation
+        const container = html.querySelector('.package-list') || html;
+        if (container) {
+            container.addEventListener('change', (event) => {
+                if (event.target.matches('input[type="checkbox"]')) {
+                    updateButtonVisibility();
+                    updateCurrentStateHighlight();
+                }
+            });
 
-        // Also trigger when clicking package headers
-        form.on('click', '.package-header', function() {
-            setTimeout(() => {
-                updateButtonVisibility();
-                updateCurrentStateHighlight();
-            }, 0);
-        });
+            // Also trigger when clicking package headers
+            container.addEventListener('click', (event) => {
+                if (event.target.matches('.package-header') || event.target.closest('.package-header')) {
+                    setTimeout(() => {
+                        updateButtonVisibility();
+                        updateCurrentStateHighlight();
+                    }, 0);
+                }
+            });
+        }
 
         // Save as New button click
-        html.find('.save-new-module-set').click(async (event) => {
-            event.preventDefault();
-            
-            // Capture current module states from the form checkboxes
-            const currentModules = [];
-            html.find('input[type="checkbox"]').each(function() {
-                if (this.checked) currentModules.push(this.name);
-            });
-            
-            const content = `
-                <form>
-                    <div class="form-group">
-                        <label>${game.i18n.localize(`${this.ID}.moduleSet.savePrompt`)}</label>
-                        <div class="form-fields">
-                            <input type="text" name="setName" required>
+        const saveNewBtn = html.querySelector('.save-new-module-set');
+        if (saveNewBtn) {
+            saveNewBtn.addEventListener('click', async (event) => {
+                event.preventDefault();
+                
+                // Capture current module states from the form checkboxes
+                const currentModules = [];
+                html.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+                    if (checkbox.checked) currentModules.push(checkbox.name);
+                });
+                
+                const content = `
+                    <form>
+                        <div class="form-group">
+                            <label>${game.i18n.localize(`${this.ID}.moduleSet.savePrompt`)}</label>
+                            <div class="form-fields">
+                                <input type="text" name="setName" required>
+                            </div>
                         </div>
-                    </div>
-                </form>`;
+                    </form>`;
 
-            const dialog = new Dialog({
-                title: game.i18n.localize(`${this.ID}.moduleSet.title`),
-                content: content,
-                buttons: {
-                    saveAndApply: {
-                        icon: '<i class="fas fa-save"></i>',
-                        label: "Save and Reload",
-                        callback: async (html) => {
-                            const form = html.find('form')[0];
-                            const setName = form.setName.value;
-                            if (!setName) return;
+                const dialog = new Dialog({
+                    title: game.i18n.localize(`${this.ID}.moduleSet.title`),
+                    content: content,
+                    buttons: {
+                        saveAndApply: {
+                            icon: '<i class="fas fa-save"></i>',
+                            label: "Save and Reload",
+                            callback: async (html) => {
+                                // In v13, Dialog callbacks receive the form element directly
+                                let form = html;
+                                if (!(html instanceof HTMLElement)) {
+                                    form = html?.[0] || html;
+                                }
+                                if (!(form instanceof HTMLElement)) {
+                                    form = document.querySelector('form') || html;
+                                }
+                                if (!form || !form.setName) return;
+                                const setName = form.setName.value;
+                                if (!setName) return;
 
-                            try {
+                                try {
+                                    // Save the new module set
+                                    const updatedModuleSets = game.settings.get(this.ID, 'moduleSets');
+                                    updatedModuleSets[setName] = currentModules;
+                                    await game.settings.set(this.ID, 'moduleSets', updatedModuleSets);
+                                    
+                                    // Update core settings and reload
+                                    const moduleConfig = {};
+                                    for (let moduleId of game.modules.keys()) {
+                                        moduleConfig[moduleId] = currentModules.includes(moduleId);
+                                    }
+                                    await game.settings.set('core', 'moduleConfiguration', moduleConfig);
+                                    window.location.reload();
+                                } catch (error) {
+                                    console.error("COFFEE PUB • MONARCH | Error saving module set:", error);
+                                    ui.notifications.error("COFFEE PUB • MONARCH | Failed to save module set. Check the console for details.");
+                                }
+                            }
+                        },
+                        saveOnly: {
+                            icon: '<i class="fas fa-save"></i>',
+                            label: "Save Only",
+                            callback: async (html) => {
+                                // In v13, Dialog callbacks receive the form element directly
+                                let form = html;
+                                if (!(html instanceof HTMLElement)) {
+                                    form = html?.[0] || html;
+                                }
+                                if (!(form instanceof HTMLElement)) {
+                                    form = document.querySelector('form') || html;
+                                }
+                                if (!form || !form.setName) return;
+                                const setName = form.setName.value;
+                                if (!setName) return;
+
                                 // Save the new module set
                                 const updatedModuleSets = game.settings.get(this.ID, 'moduleSets');
                                 updatedModuleSets[setName] = currentModules;
                                 await game.settings.set(this.ID, 'moduleSets', updatedModuleSets);
                                 
-                                // Update core settings and reload
-                                const moduleConfig = {};
-                                for (let moduleId of game.modules.keys()) {
-                                    moduleConfig[moduleId] = currentModules.includes(moduleId);
+                                // Update just our dropdown
+                                const moduleSetSelect = app.element?.querySelector('.load-module-set');
+                                if (moduleSetSelect) {
+                                    const existingSets = Object.keys(updatedModuleSets);
+                                    moduleSetSelect.innerHTML = '<option value="">-- Select a Module Set --</option>';
+                                    existingSets.forEach(set => {
+                                        const option = document.createElement('option');
+                                        option.value = set;
+                                        option.textContent = set;
+                                        moduleSetSelect.appendChild(option);
+                                    });
+                                    moduleSetSelect.value = setName;
                                 }
-                                await game.settings.set('core', 'moduleConfiguration', moduleConfig);
-                                window.location.reload();
-                            } catch (error) {
-                                console.error("COFFEE PUB • MONARCH | Error saving module set:", error);
-                                ui.notifications.error("COFFEE PUB • MONARCH | Failed to save module set. Check the console for details.");
                             }
+                        },
+                        cancel: {
+                            icon: '<i class="fas fa-times"></i>',
+                            label: "Cancel"
                         }
                     },
-                    saveOnly: {
-                        icon: '<i class="fas fa-save"></i>',
-                        label: "Save Only",
-                        callback: async (html) => {
-                            const form = html.find('form')[0];
-                            const setName = form.setName.value;
-                            if (!setName) return;
+                    default: 'saveAndApply'
+                });
 
-                            // Save the new module set
-                            const updatedModuleSets = game.settings.get(this.ID, 'moduleSets');
-                            updatedModuleSets[setName] = currentModules;
-                            await game.settings.set(this.ID, 'moduleSets', updatedModuleSets);
-                            
-                            // Update just our dropdown
-                            const moduleSetSelect = app.element.find('.load-module-set');
-                            const existingSets = Object.keys(updatedModuleSets);
-                            moduleSetSelect.empty().append(`<option value="">-- Select a Module Set --</option>`);
-                            existingSets.forEach(set => {
-                                moduleSetSelect.append(`<option value="${set}">${set}</option>`);
-                            });
-                            moduleSetSelect.val(setName);
-                        }
-                    },
-                    cancel: {
-                        icon: '<i class="fas fa-times"></i>',
-                        label: "Cancel"
-                    }
-                },
-                default: 'saveAndApply'
+                dialog.render(true);
             });
-
-            dialog.render(true);
-        });
+        }
 
         // Update button click
-        html.find('.update-module-set').click(async (event) => {
-            event.preventDefault();
-            
-            const setName = html.find('.load-module-set').val();
-            if (!setName) return;
+        const updateBtn = html.querySelector('.update-module-set');
+        if (updateBtn) {
+            updateBtn.addEventListener('click', async (event) => {
+                event.preventDefault();
+                
+                const setNameSelect = html.querySelector('.load-module-set');
+                const setName = setNameSelect ? setNameSelect.value : '';
+                if (!setName) return;
 
-            // Capture current module states from the form checkboxes
-            const currentModules = [];
-            html.find('input[type="checkbox"]').each(function() {
-                if (this.checked) currentModules.push(this.name);
-            });
+                // Capture current module states from the form checkboxes
+                const currentModules = [];
+                html.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+                    if (checkbox.checked) currentModules.push(checkbox.name);
+                });
 
             const dialog = new Dialog({
                 title: game.i18n.localize(`${this.ID}.moduleSet.title`),
@@ -931,145 +1074,174 @@ class CoffeePubMonarch {
                 default: 'updateAndApply'
             });
 
-            dialog.render(true);
-        });
+                dialog.render(true);
+            });
+        }
 
         // Load module set selection
-        html.find('.load-module-set').change(async (event) => {
-            const setName = event.target.value;
-            const loadButton = html.find('.load-set-button');
-            
-            if (!setName) {
-                loadButton.hide();
-                html.find('.update-module-set').hide();
-                return;
-            }
-
-            // Get current active modules to compare
-            const currentActiveModules = Array.from(game.modules.keys()).filter(id => game.modules.get(id)?.active);
-            const moduleSets = game.settings.get(this.ID, 'moduleSets');
-            const moduleSet = moduleSets[setName];
-
-            // Check if the selected set matches current state
-            const isCurrentState = moduleSet.length === currentActiveModules.length && 
-                moduleSet.every(id => currentActiveModules.includes(id)) &&
-                currentActiveModules.every(id => moduleSet.includes(id));
-
-            // Only show load button if the selected set is different from current state
-            loadButton.toggle(!isCurrentState);
-            // Hide update button initially since no changes yet
-            html.find('.update-module-set').hide();
-
-            // Get current state before changes
-            const originalState = new Map();
-            const form = html.closest('#module-management');
-            form.find('input[type="checkbox"]').each(function() {
-                originalState.set(this.name, this.checked);
-            });
-
-            // Update module checkboxes and clear all highlights
-            form.find('input[type="checkbox"]').each(function() {
-                const moduleId = this.name;
-                const wasChecked = originalState.get(moduleId);
-                const willBeChecked = moduleSet.includes(moduleId);
+        const loadModuleSetSelect = html.querySelector('.load-module-set');
+        if (loadModuleSetSelect) {
+            loadModuleSetSelect.addEventListener('change', async (event) => {
+                const setName = event.target.value;
+                const loadButton = html.querySelector('.load-set-button');
+                const updateModuleBtn = html.querySelector('.update-module-set');
                 
-                // Update checkbox
-                this.checked = willBeChecked;
-                
-                // Clear existing highlights
-                const packageElem = $(this).closest('.package');
-                packageElem.removeClass('module-enabled-change module-disabled-change module-current-change');
-                
-                // Add highlight if changed from the selected set's state
-                if (wasChecked !== willBeChecked) {
-                    packageElem.addClass(willBeChecked ? 'module-enabled-change' : 'module-disabled-change');
+                if (!setName) {
+                    if (loadButton) loadButton.style.display = 'none';
+                    if (updateModuleBtn) updateModuleBtn.style.display = 'none';
+                    return;
+                }
+
+                // Get current active modules to compare
+                const currentActiveModules = Array.from(game.modules.keys()).filter(id => game.modules.get(id)?.active);
+                const moduleSets = game.settings.get(this.ID, 'moduleSets');
+                const moduleSet = moduleSets[setName];
+
+                // Check if the selected set matches current state
+                const isCurrentState = moduleSet.length === currentActiveModules.length && 
+                    moduleSet.every(id => currentActiveModules.includes(id)) &&
+                    currentActiveModules.every(id => moduleSet.includes(id));
+
+                // Only show load button if the selected set is different from current state
+                if (loadButton) {
+                    loadButton.style.display = isCurrentState ? 'none' : '';
+                }
+                // Hide update button initially since no changes yet
+                if (updateModuleBtn) updateModuleBtn.style.display = 'none';
+
+                // Get current state before changes
+                const originalState = new Map();
+                // In v13, html is the window-content section, checkboxes are in .package-list
+                const packageList = html.querySelector('.package-list') || html;
+                if (packageList) {
+                    packageList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+                        originalState.set(checkbox.name, checkbox.checked);
+                    });
+
+                    // Update module checkboxes and clear all highlights
+                    packageList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+                        const moduleId = checkbox.name;
+                        const wasChecked = originalState.get(moduleId);
+                        const willBeChecked = moduleSet.includes(moduleId);
+                        
+                        // Update checkbox
+                        checkbox.checked = willBeChecked;
+                        
+                        // Clear existing highlights
+                        const packageElem = checkbox.closest('.package');
+                        if (packageElem) {
+                            packageElem.classList.remove('module-enabled-change', 'module-disabled-change', 'module-current-change');
+                            
+                            // Add highlight if changed from the selected set's state
+                            if (wasChecked !== willBeChecked) {
+                                packageElem.classList.add(willBeChecked ? 'module-enabled-change' : 'module-disabled-change');
+                            }
+                        }
+                    });
+
+                    // Reset the initial state map to match the newly selected set
+                    initialModuleStates.clear();
+                    packageList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+                        initialModuleStates.set(checkbox.name, checkbox.checked);
+                    });
                 }
             });
-
-            // Reset the initial state map to match the newly selected set
-            initialModuleStates.clear();
-            form.find('input[type="checkbox"]').each(function() {
-                initialModuleStates.set(this.name, this.checked);
-            });
-        });
+        }
 
         // Load Set button click
-        html.find('.load-set-button').click(async (event) => {
-            event.preventDefault();
-            
-            const setName = html.find('.load-module-set').val();
-            if (!setName) return;
+        const loadSetBtn = html.querySelector('.load-set-button');
+        if (loadSetBtn) {
+            loadSetBtn.addEventListener('click', async (event) => {
+                event.preventDefault();
+                
+                const setNameSelect = html.querySelector('.load-module-set');
+                const setName = setNameSelect ? setNameSelect.value : '';
+                if (!setName) return;
 
-            const moduleSets = game.settings.get(this.ID, 'moduleSets');
-            const moduleSet = moduleSets[setName];
+                const moduleSets = game.settings.get(this.ID, 'moduleSets');
+                const moduleSet = moduleSets[setName];
 
-            // Get the current module configuration first
-            const currentConfig = game.settings.get('core', 'moduleConfiguration') || {};
-            
-            // Update only the modules we know about
-            const moduleConfig = {...currentConfig};
-            for (let moduleId of game.modules.keys()) {
-                moduleConfig[moduleId] = moduleSet.includes(moduleId);
-            }
-            await game.settings.set('core', 'moduleConfiguration', moduleConfig);
+                // Get the current module configuration first
+                const currentConfig = game.settings.get('core', 'moduleConfiguration') || {};
+                
+                // Update only the modules we know about
+                const moduleConfig = {...currentConfig};
+                for (let moduleId of game.modules.keys()) {
+                    moduleConfig[moduleId] = moduleSet.includes(moduleId);
+                }
+                await game.settings.set('core', 'moduleConfiguration', moduleConfig);
 
-            // Force a reload to apply changes
-            window.location.reload();
-        });
+                // Force a reload to apply changes
+                window.location.reload();
+            });
+        }
 
         // Delete module set
-        html.find('.delete-module-set').click(async (event) => {
-            event.preventDefault();
-            const select = html.find('.load-module-set');
-            const setName = select.val();
-            if (!setName) return;
+        const deleteBtn = html.querySelector('.delete-module-set');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const select = html.querySelector('.load-module-set');
+                if (!select) return;
+                const setName = select.value;
+                if (!setName) return;
 
-            const confirm = await Dialog.confirm({
-                title: game.i18n.localize(`${this.ID}.moduleSet.title`),
-                content: game.i18n.format(`${this.ID}.moduleSet.deleteConfirm`, {name: setName}),
+                const confirm = await Dialog.confirm({
+                    title: game.i18n.localize(`${this.ID}.moduleSet.title`),
+                    content: game.i18n.format(`${this.ID}.moduleSet.deleteConfirm`, {name: setName}),
+                });
+
+                if (!confirm) return;
+
+                const moduleSets = game.settings.get(this.ID, 'moduleSets');
+                delete moduleSets[setName];
+                await game.settings.set(this.ID, 'moduleSets', moduleSets);
+                
+                // Just update our dropdown instead of re-rendering the whole window
+                const existingSets = Object.keys(moduleSets);
+                select.innerHTML = '<option value="">-- Select a Module Set --</option>';
+                existingSets.forEach(set => {
+                    const option = document.createElement('option');
+                    option.value = set;
+                    option.textContent = set;
+                    select.appendChild(option);
+                });
+                select.value = '';
+                const loadSetButton = html.querySelector('.load-set-button');
+                if (loadSetButton) loadSetButton.style.display = 'none';
             });
-
-            if (!confirm) return;
-
-            const moduleSets = game.settings.get(this.ID, 'moduleSets');
-            delete moduleSets[setName];
-            await game.settings.set(this.ID, 'moduleSets', moduleSets);
-            
-            // Just update our dropdown instead of re-rendering the whole window
-            const existingSets = Object.keys(moduleSets);
-            select.empty().append(`<option value="">-- Select a Module Set --</option>`);
-            existingSets.forEach(set => {
-                select.append(`<option value="${set}">${set}</option>`);
-            });
-            select.val('');
-            html.find('.load-set-button').hide();
-        });
+        }
 
         // Export module sets
-        html.find('.export-module-sets').click(async (event) => {
-            event.preventDefault();
-            
-            const moduleSets = game.settings.get(this.ID, 'moduleSets');
-            const exportData = {
-                moduleSets,
-                exportedAt: new Date().toISOString(),
-                foundryVersion: game.version,
-                moduleVersion: game.modules.get(this.ID).version
-            };
-            
-            const now = new Date();
-            const date = now.toISOString().split('T')[0];
-            const time = `${now.getHours()}-${now.getMinutes()}`;
-            const filename = `monarch-${date}-${time}.json`;
-            const data = JSON.stringify(exportData, null, 2);
-            
-            // Use Foundry's built-in saveDataToFile
-            saveDataToFile(data, "text/json", filename);
-        });
+        const exportBtn = html.querySelector('.export-module-sets');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', async (event) => {
+                event.preventDefault();
+                
+                const moduleSets = game.settings.get(this.ID, 'moduleSets');
+                const exportData = {
+                    moduleSets,
+                    exportedAt: new Date().toISOString(),
+                    foundryVersion: game.version,
+                    moduleVersion: game.modules.get(this.ID).version
+                };
+                
+                const now = new Date();
+                const date = now.toISOString().split('T')[0];
+                const time = `${now.getHours()}-${now.getMinutes()}`;
+                const filename = `monarch-${date}-${time}.json`;
+                const data = JSON.stringify(exportData, null, 2);
+                
+                // Use Foundry's built-in saveDataToFile
+                saveDataToFile(data, "text/json", filename);
+            });
+        }
 
         // Import module sets
-        html.find('.import-module-sets').click(async (event) => {
-            event.preventDefault();
+        const importBtn = html.querySelector('.import-module-sets');
+        if (importBtn) {
+            importBtn.addEventListener('click', async (event) => {
+                event.preventDefault();
 
             const content = `
                 <form>
@@ -1091,7 +1263,16 @@ class CoffeePubMonarch {
                         icon: '<i class="fas fa-file-import"></i>',
                         label: "Import",
                         callback: async (html) => {
-                            const fileInput = html.find('input[type="file"]')[0];
+                            // In v13, Dialog callbacks receive the form element
+                            let form = html;
+                            if (!(html instanceof HTMLElement)) {
+                                form = html?.[0] || html;
+                            }
+                            if (!(form instanceof HTMLElement)) {
+                                form = document.querySelector('form') || html;
+                            }
+                            const fileInput = form.querySelector('input[type="file"]');
+                            if (!fileInput) return;
                             const file = fileInput.files[0];
                             if (!file) return;
 
@@ -1162,12 +1343,19 @@ ${extraModules.length ? extraModules.join('\n') : 'None'}`;
                                     analysisDialog.render(true);
 
                                     // Update the dropdown
-                                    const moduleSetSelect = html.closest('#module-management').find('.load-module-set');
-                                    const existingSets = Object.keys(importedSets);
-                                    moduleSetSelect.empty().append(`<option value="">-- Select a Module Set --</option>`);
-                                    existingSets.forEach(set => {
-                                        moduleSetSelect.append(`<option value="${set}">${set}</option>`);
-                                    });
+                                    // In v13, find the module management window and look for our controls
+                                    const moduleManagerWindow = document.querySelector('#module-management');
+                                    const moduleSetSelect = moduleManagerWindow ? moduleManagerWindow.querySelector('.load-module-set') : html.querySelector('.load-module-set');
+                                    if (moduleSetSelect) {
+                                        const existingSets = Object.keys(importedSets);
+                                        moduleSetSelect.innerHTML = '<option value="">-- Select a Module Set --</option>';
+                                        existingSets.forEach(set => {
+                                            const option = document.createElement('option');
+                                            option.value = set;
+                                            option.textContent = set;
+                                            moduleSetSelect.appendChild(option);
+                                        });
+                                    }
 
                                     // Show reload prompt
                                     const reloadDialog = new Dialog({
@@ -1204,7 +1392,8 @@ ${extraModules.length ? extraModules.join('\n') : 'None'}`;
                 default: "import"
             });
             dialog.render(true);
-        });
+            });
+        }
     }
 }
 

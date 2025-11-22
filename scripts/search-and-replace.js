@@ -30,30 +30,58 @@ new (class TextReplacerApp extends Application {
 
   activateListeners(html) {
     super.activateListeners(html);
-    html.find("button[name='clearFields']").on("click", () => {
-      // Reset all input fields
-      html.find('[name="oldPath"]').val("");
-      html.find('[name="newPath"]').val("");
-      html.find('[name="folderFilter"]').val("");
-      html.find('[name="matchMode"]').val("all");
-      html.find('[name="updateActors"]').prop('checked', false);
-      html.find('[name="updateItems"]').prop('checked', false);
-      html.find('[name="updateScenes"]').prop('checked', false);
-      html.find('[name="updateJournals"]').prop('checked', false);
-      html.find('[name="updateTables"]').prop('checked', false);
-      html.find('[name="updatePlaylists"]').prop('checked', false);
-      html.find('[name="targetImages"]').prop('checked', false);
-      html.find('[name="targetText"]').prop('checked', false);
-      html.find('[name="targetAudio"]').prop('checked', false);
-      // Clear the results box
-      html.find('#report-area').html('<p>Always back up your files files before running a mass change.</p><p>Run a search before doing a mass replace to verify what will be changed.</p>');
-      html.find('input, select, textarea').prop('disabled', false).prop('readonly', false);
-    });
-    html.find("button[name='runReport']").on("click", () => this._handleReplace(html, false));
-    html.find("button[name='runReplace']").on("click", async () => {
-      if (!confirm("Are you sure you want to perform a mass replace? This cannot be undone.")) return;
-      await this._handleReplace(html, true);
-    });
+    const clearBtn = html.querySelector("button[name='clearFields']");
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        // Reset all input fields
+        const oldPathInput = html.querySelector('[name="oldPath"]');
+        if (oldPathInput) oldPathInput.value = "";
+        const newPathInput = html.querySelector('[name="newPath"]');
+        if (newPathInput) newPathInput.value = "";
+        const folderFilterSelect = html.querySelector('[name="folderFilter"]');
+        if (folderFilterSelect) folderFilterSelect.value = "";
+        const matchModeSelect = html.querySelector('[name="matchMode"]');
+        if (matchModeSelect) matchModeSelect.value = "all";
+        const updateActorsCheckbox = html.querySelector('[name="updateActors"]');
+        if (updateActorsCheckbox) updateActorsCheckbox.checked = false;
+        const updateItemsCheckbox = html.querySelector('[name="updateItems"]');
+        if (updateItemsCheckbox) updateItemsCheckbox.checked = false;
+        const updateScenesCheckbox = html.querySelector('[name="updateScenes"]');
+        if (updateScenesCheckbox) updateScenesCheckbox.checked = false;
+        const updateJournalsCheckbox = html.querySelector('[name="updateJournals"]');
+        if (updateJournalsCheckbox) updateJournalsCheckbox.checked = false;
+        const updateTablesCheckbox = html.querySelector('[name="updateTables"]');
+        if (updateTablesCheckbox) updateTablesCheckbox.checked = false;
+        const updatePlaylistsCheckbox = html.querySelector('[name="updatePlaylists"]');
+        if (updatePlaylistsCheckbox) updatePlaylistsCheckbox.checked = false;
+        const targetImagesCheckbox = html.querySelector('[name="targetImages"]');
+        if (targetImagesCheckbox) targetImagesCheckbox.checked = false;
+        const targetTextCheckbox = html.querySelector('[name="targetText"]');
+        if (targetTextCheckbox) targetTextCheckbox.checked = false;
+        const targetAudioCheckbox = html.querySelector('[name="targetAudio"]');
+        if (targetAudioCheckbox) targetAudioCheckbox.checked = false;
+        // Clear the results box
+        const reportArea = html.querySelector('#report-area');
+        if (reportArea) {
+          reportArea.innerHTML = '<p>Always back up your files files before running a mass change.</p><p>Run a search before doing a mass replace to verify what will be changed.</p>';
+        }
+        html.querySelectorAll('input, select, textarea').forEach(input => {
+          input.disabled = false;
+          input.readOnly = false;
+        });
+      });
+    }
+    const runReportBtn = html.querySelector("button[name='runReport']");
+    if (runReportBtn) {
+      runReportBtn.addEventListener("click", () => this._handleReplace(html, false));
+    }
+    const runReplaceBtn = html.querySelector("button[name='runReplace']");
+    if (runReplaceBtn) {
+      runReplaceBtn.addEventListener("click", async () => {
+        if (!confirm("Are you sure you want to perform a mass replace? This cannot be undone.")) return;
+        await this._handleReplace(html, true);
+      });
+    }
   }
 
   _groupBy(array, keyFn) {
@@ -77,20 +105,28 @@ new (class TextReplacerApp extends Application {
   }
 
   async _handleReplace(html, doReplace = false) {
-    const oldPath = html.find('[name="oldPath"]').val()?.trim();
-    const newPath = html.find('[name="newPath"]').val() ?? "";
-    const folderFilter = html.find('[name="folderFilter"]').val();
-    const matchMode = html.find('[name="matchMode"]').val();
-    const reportDiv = html.find("#report-area")[0];
+    const oldPathInput = html.querySelector('[name="oldPath"]');
+    const oldPath = oldPathInput ? oldPathInput.value?.trim() : '';
+    const newPathInput = html.querySelector('[name="newPath"]');
+    const newPath = newPathInput ? newPathInput.value ?? "" : "";
+    const folderFilterSelect = html.querySelector('[name="folderFilter"]');
+    const folderFilter = folderFilterSelect ? folderFilterSelect.value : '';
+    const matchModeSelect = html.querySelector('[name="matchMode"]');
+    const matchMode = matchModeSelect ? matchModeSelect.value : 'all';
+    const reportDiv = html.querySelector("#report-area");
+    if (!reportDiv) return;
     const log = (msg) => {
       reportDiv.innerHTML += `<div style='margin-bottom:1em;'>${msg}</div>`;
       reportDiv.scrollTop = reportDiv.scrollHeight;
     };
 
     // Target field checkboxes
-    const targetImages = html.find('[name="targetImages"]')[0].checked;
-    const targetText = html.find('[name="targetText"]')[0].checked;
-    const targetAudio = html.find('[name="targetAudio"]')[0].checked;
+    const targetImagesCheckbox = html.querySelector('[name="targetImages"]');
+    const targetImages = targetImagesCheckbox ? targetImagesCheckbox.checked : false;
+    const targetTextCheckbox = html.querySelector('[name="targetText"]');
+    const targetText = targetTextCheckbox ? targetTextCheckbox.checked : false;
+    const targetAudioCheckbox = html.querySelector('[name="targetAudio"]');
+    const targetAudio = targetAudioCheckbox ? targetAudioCheckbox.checked : false;
 
     if (!targetImages && !targetText && !targetAudio) {
       ui.notifications.warn("Please select at least one target field (Images, Text, or Audio).", {permanent: false});
@@ -107,13 +143,19 @@ new (class TextReplacerApp extends Application {
       ? `<p><strong style="color: orange;">Running replacements...</strong></p>`
       : `<p><strong>Generating report...</strong></p>`;
 
+    const updateActorsCheckbox = html.querySelector('[name="updateActors"]');
+    const updateItemsCheckbox = html.querySelector('[name="updateItems"]');
+    const updateScenesCheckbox = html.querySelector('[name="updateScenes"]');
+    const updateJournalsCheckbox = html.querySelector('[name="updateJournals"]');
+    const updateTablesCheckbox = html.querySelector('[name="updateTables"]');
+    const updatePlaylistsCheckbox = html.querySelector('[name="updatePlaylists"]');
     const options = {
-      actors: html.find('[name="updateActors"]')[0].checked,
-      items: html.find('[name="updateItems"]')[0].checked,
-      scenes: html.find('[name="updateScenes"]')[0].checked,
-      journals: html.find('[name="updateJournals"]')[0].checked,
-      tables: html.find('[name="updateTables"]')[0].checked,
-      playlists: html.find('[name="updatePlaylists"]')[0].checked
+      actors: updateActorsCheckbox ? updateActorsCheckbox.checked : false,
+      items: updateItemsCheckbox ? updateItemsCheckbox.checked : false,
+      scenes: updateScenesCheckbox ? updateScenesCheckbox.checked : false,
+      journals: updateJournalsCheckbox ? updateJournalsCheckbox.checked : false,
+      tables: updateTablesCheckbox ? updateTablesCheckbox.checked : false,
+      playlists: updatePlaylistsCheckbox ? updatePlaylistsCheckbox.checked : false
     };
 
     // Warn if no document type is selected
@@ -467,8 +509,8 @@ new (class TextReplacerApp extends Application {
       };
       return map[type] || type.charAt(0).toUpperCase() + type.slice(1);
     }
-    return $(
-      `<style>
+    const container = document.createElement('div');
+    container.insertAdjacentHTML('beforeend', `<style>
 .text-replacer-flex {
   display: flex;
   gap: 1em;
@@ -693,8 +735,8 @@ padding-right: 0px;
           <p>Always back up your files files before running a mass change.</p>
           <p>Run a search before doing a mass replace to verify what will be changed.</p>
         </div>
-      </div>`
-    );
+      </div>`);
+    return container;
   }
 })().render(true);
 
