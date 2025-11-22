@@ -981,8 +981,10 @@ class CoffeePubMonarch {
                                 if (!(form instanceof HTMLElement)) {
                                     form = document.querySelector('form') || html;
                                 }
-                                if (!form || !form.setName) return;
-                                const setName = form.setName.value;
+                                // Use querySelector to find the input field
+                                const setNameInput = form.querySelector?.('input[name="setName"]');
+                                if (!setNameInput) return;
+                                const setName = setNameInput.value?.trim();
                                 if (!setName) return;
 
                                 try {
@@ -1016,8 +1018,10 @@ class CoffeePubMonarch {
                                 if (!(form instanceof HTMLElement)) {
                                     form = document.querySelector('form') || html;
                                 }
-                                if (!form || !form.setName) return;
-                                const setName = form.setName.value;
+                                // Use querySelector to find the input field
+                                const setNameInput = form.querySelector?.('input[name="setName"]');
+                                if (!setNameInput) return;
+                                const setName = setNameInput.value?.trim();
                                 if (!setName) return;
 
                                 // Save the new module set
