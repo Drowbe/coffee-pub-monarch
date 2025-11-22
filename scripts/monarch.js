@@ -332,11 +332,40 @@ class CoffeePubMonarch {
                             try {
                                 const reader = new FileReader();
                                 reader.onload = async (e) => {
-                                    const importData = JSON.parse(e.target.result);
-                                    const importedSettings = importData.allModuleSettings;
+                                    let importData;
+                                    try {
+                                        importData = JSON.parse(e.target.result);
+                                    } catch (parseError) {
+                                        ui.notifications.error("Invalid JSON file. Please check the file format.");
+                                        console.error("COFFEE PUB • MONARCH | JSON parse error:", parseError);
+                                        return;
+                                    }
+                                    
+                                    // Check for the expected structure
+                                    let importedSettings = importData.allModuleSettings;
+
+                                    // If this is a module sets file, provide helpful guidance
+                                    if (!importedSettings && importData.moduleSets) {
+                                        const fileKeys = Object.keys(importData || {});
+                                        console.error("COFFEE PUB • MONARCH | Import file structure:", fileKeys);
+                                        ui.notifications.error(
+                                            `This appears to be a Module Sets file, not a Settings file. ` +
+                                            `To import module sets, please use the "Import Sets" button in the Module Management window ` +
+                                            `(not the Settings window). ` +
+                                            `Settings files contain 'allModuleSettings', while module sets files contain 'moduleSets'.`
+                                        );
+                                        return;
+                                    }
 
                                     if (!importedSettings) {
-                                        ui.notifications.error("Invalid import file format. Expected 'allModuleSettings'.");
+                                        // Provide more helpful error message
+                                        const fileKeys = Object.keys(importData || {});
+                                        console.error("COFFEE PUB • MONARCH | Import file structure:", fileKeys);
+                                        ui.notifications.error(
+                                            `Invalid import file format. Expected 'allModuleSettings' property. ` +
+                                            `Found keys: ${fileKeys.length ? fileKeys.join(', ') : 'none'}. ` +
+                                            `Please ensure you're importing a settings export file (created with "Export Settings" in the Settings window).`
+                                        );
                                         return;
                                     }
 
@@ -462,19 +491,29 @@ class CoffeePubMonarch {
                                         title: "Import Preview",
                                         content: previewContent,
                                         render: (html) => {
+                                            // In v13, Dialog render hooks receive the dialog element
+                                            // Ensure html is a DOM element
+                                            let dialogElement = html;
+                                            if (!(html instanceof HTMLElement)) {
+                                                dialogElement = html?.[0] || html;
+                                            }
+                                            if (!(dialogElement instanceof HTMLElement)) {
+                                                dialogElement = document.querySelector('.window-app.dialog') || html;
+                                            }
+                                            
                                             // Add event handlers for Select All/None buttons
-                                            const selectAllBtn = html.querySelector('.select-all-modules');
+                                            const selectAllBtn = dialogElement.querySelector('.select-all-modules');
                                             if (selectAllBtn) {
                                                 selectAllBtn.addEventListener('click', () => {
-                                                    html.querySelectorAll('.module-import-checkbox').forEach(checkbox => {
+                                                    dialogElement.querySelectorAll('.module-import-checkbox').forEach(checkbox => {
                                                         checkbox.checked = true;
                                                     });
                                                 });
                                             }
-                                            const selectNoneBtn = html.querySelector('.select-none-modules');
+                                            const selectNoneBtn = dialogElement.querySelector('.select-none-modules');
                                             if (selectNoneBtn) {
                                                 selectNoneBtn.addEventListener('click', () => {
-                                                    html.querySelectorAll('.module-import-checkbox').forEach(checkbox => {
+                                                    dialogElement.querySelectorAll('.module-import-checkbox').forEach(checkbox => {
                                                         checkbox.checked = false;
                                                     });
                                                 });
