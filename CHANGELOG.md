@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [13.0.1] - FoundryVTT v13 Stable
+
+### Fixed
+- **Dialog Callback Errors**: Fixed `html.querySelector is not a function` errors in Dialog callbacks by adding proper type checking and element unwrapping for the `html` parameter
+- **Dialog Render Hook Errors**: Fixed `html.querySelector is not a function` errors in Dialog `render` hooks by adding safety checks for different `html` parameter types
+- **Save New Module Set**: Fixed issue where saving a new module set would not work - changed form data access from `form.setName.value` to `querySelector('input[name="setName"]').value` for v13 compatibility
+- **Import File Type Detection**: Improved error messages when importing wrong file types (module sets vs settings) with clearer guidance to use the correct import button
+
+### Improved
+- **Error Handling**: Enhanced error handling in Dialog callbacks and render hooks to gracefully handle different parameter types
+- **User Feedback**: Better error messages that guide users to the correct import functionality when wrong file types are detected
+
 ## [13.0.0] - FoundryVTT v13 Migration
 
 ### Breaking Changes
