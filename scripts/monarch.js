@@ -184,8 +184,14 @@ class CoffeePubMonarch {
         exportBtn.type = 'button';
         exportBtn.innerHTML = '<i class="fas fa-file-export"></i> Export Settings';
         
+        const pruneBtn = document.createElement('button');
+        pruneBtn.className = 'monarch-prune-settings';
+        pruneBtn.type = 'button';
+        pruneBtn.innerHTML = '<i class="fas fa-broom"></i> Prune Settings';
+        
         importExportButtons.appendChild(importBtn);
         importExportButtons.appendChild(exportBtn);
+        importExportButtons.appendChild(pruneBtn);
         
         // Find the Reset Defaults button - search in sidebar, html, and app.element
         // The button might be in the sidebar, window footer, or main content
@@ -829,8 +835,284 @@ class CoffeePubMonarch {
         // Add new export listener
         html.addEventListener('click', exportHandler);
         
-        // Store both handlers for cleanup
-        this._handlerStorage.set(html, { importHandler, exportHandler });
+        // Prune Settings button handler
+        const pruneHandler = async (event) => {
+            if (!event.target.matches('.monarch-prune-settings') && !event.target.closest('.monarch-prune-settings')) return;
+            event.preventDefault();
+            
+            // Get all installed modules and systems (these are what should have settings)
+            const allInstalledModules = new Set(game.modules.keys());
+            const allInstalledSystems = new Set();
+            if (game.systems) {
+                for (const [systemId, system] of game.systems) {
+                    allInstalledSystems.add(systemId);
+                }
+            }
+            if (game.system?.id) {
+                allInstalledSystems.add(game.system.id);
+            }
+            
+            // Get all stored settings from the database (not just registered ones)
+            // Settings are stored in world.flags and user.flags
+            const allStoredSettings = new Map(); // Map<"namespace.key", {namespace, key, scope}>
+            const allSettingsByNamespace = {};
+            
+            // Check world-scoped settings (stored in world.flags)
+            if (game.world?.flags) {
+                for (const [namespace, namespaceFlags] of Object.entries(game.world.flags)) {
+                    if (namespace === 'core') continue; // Skip core, it's always valid
+                    
+                    // Check if this namespace is installed
+                    const isInstalled = allInstalledModules.has(namespace) || 
+                                      allInstalledSystems.has(namespace) || 
+                                      namespace === 'core';
+                    
+                    if (namespaceFlags && typeof namespaceFlags === 'object') {
+                        for (const [key, value] of Object.entries(namespaceFlags)) {
+                            // Skip internal Foundry flags
+                            if (key.startsWith('_')) continue;
+                            
+                            const fullKey = `${namespace}.${key}`;
+                            allStoredSettings.set(fullKey, { namespace, key, scope: 'world' });
+                            
+                            // Collect for report
+                            if (!allSettingsByNamespace[namespace]) {
+                                allSettingsByNamespace[namespace] = [];
+                            }
+                            allSettingsByNamespace[namespace].push(key);
+                        }
+                    }
+                }
+            }
+            
+            // Check client-scoped settings (stored in user.flags)
+            if (game.user?.flags) {
+                for (const [namespace, namespaceFlags] of Object.entries(game.user.flags)) {
+                    if (namespace === 'core') continue; // Skip core, it's always valid
+                    
+                    // Check if this namespace is installed
+                    const isInstalled = allInstalledModules.has(namespace) || 
+                                      allInstalledSystems.has(namespace) || 
+                                      namespace === 'core';
+                    
+                    if (namespaceFlags && typeof namespaceFlags === 'object') {
+                        for (const [key, value] of Object.entries(namespaceFlags)) {
+                            // Skip internal Foundry flags
+                            if (key.startsWith('_')) continue;
+                            
+                            const fullKey = `${namespace}.${key}`;
+                            // Only add if not already found as world-scoped
+                            if (!allStoredSettings.has(fullKey)) {
+                                allStoredSettings.set(fullKey, { namespace, key, scope: 'client' });
+                            }
+                            
+                            // Collect for report
+                            if (!allSettingsByNamespace[namespace]) {
+                                allSettingsByNamespace[namespace] = [];
+                            }
+                            if (!allSettingsByNamespace[namespace].includes(key)) {
+                                allSettingsByNamespace[namespace].push(key);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Also include registered settings for the report (they might not be in flags yet)
+            if (game.settings?.settings) {
+                for (const fullKey of game.settings.settings.keys()) {
+                    const [namespace, key] = fullKey.split(".", 2);
+                    if (namespace && namespace !== 'core') {
+                        // Collect for report
+                        if (!allSettingsByNamespace[namespace]) {
+                            allSettingsByNamespace[namespace] = [];
+                        }
+                        if (!allSettingsByNamespace[namespace].includes(key)) {
+                            allSettingsByNamespace[namespace].push(key);
+                        }
+                    }
+                }
+            }
+            
+            // Now identify orphaned settings (stored but namespace not installed)
+            const settingsToPrune = [];
+            for (const [fullKey, { namespace, key, scope }] of allStoredSettings) {
+                if (namespace === 'core') continue; // Never prune core
+                
+                const isInstalled = allInstalledModules.has(namespace) || 
+                                  allInstalledSystems.has(namespace);
+                
+                if (!isInstalled) {
+                    settingsToPrune.push({ namespace, key, fullKey, scope });
+                }
+            }
+            
+            // Sort namespaces alphabetically
+            const sortedNamespaces = Object.keys(allSettingsByNamespace).sort();
+            
+            // If there are orphaned settings, show prune dialog
+            if (settingsToPrune.length > 0) {
+                // Group orphaned settings by namespace for display
+                const prunedByNamespace = {};
+                settingsToPrune.forEach(({ namespace, key }) => {
+                    if (!prunedByNamespace[namespace]) {
+                        prunedByNamespace[namespace] = [];
+                    }
+                    prunedByNamespace[namespace].push(key);
+                });
+                
+                // Show preview dialog
+                const namespaceList = Object.entries(prunedByNamespace)
+                    .map(([ns, keys]) => `<strong>${ns}</strong>: ${keys.length} settings`)
+                    .join('<br>');
+                
+                const previewContent = `
+                    <h3>Prune Orphaned Settings</h3>
+                    <p>This will remove settings for modules/systems that are no longer installed.</p>
+                    <div class="form-group">
+                        <label>Settings to be removed:</label>
+                        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9;">
+                            ${namespaceList}
+                        </div>
+                    </div>
+                    <p><strong>Total:</strong> ${settingsToPrune.length} settings across ${Object.keys(prunedByNamespace).length} namespaces</p>
+                    <p class="notes" style="color: #ff6b6b;"><strong>Warning:</strong> This action cannot be undone. Make sure you have a backup if you want to restore these settings later.</p>`;
+                
+                const previewDialog = new Dialog({
+                    title: "Prune Orphaned Settings",
+                    content: previewContent,
+                    buttons: {
+                        proceed: {
+                            icon: '<i class="fas fa-broom"></i>',
+                            label: "Prune Settings",
+                            callback: async () => {
+                            try {
+                                let prunedCount = 0;
+                                let errorCount = 0;
+                                
+                                // Prune settings by removing them from the database
+                                for (const { namespace, key, scope } of settingsToPrune) {
+                                    try {
+                                        // Check permissions (world-scoped requires GM)
+                                        if (scope === 'world' && !game.user.isGM) {
+                                            continue; // Skip world-scoped settings if not GM
+                                        }
+                                        
+                                        if (scope === 'world') {
+                                            // Remove from world flags
+                                            if (game.world?.flags?.[namespace]?.[key] !== undefined) {
+                                                await game.world.unsetFlag(namespace, key);
+                                                prunedCount++;
+                                            }
+                                        } else if (scope === 'client') {
+                                            // Remove from user flags
+                                            if (game.user?.flags?.[namespace]?.[key] !== undefined) {
+                                                await game.user.unsetFlag(namespace, key);
+                                                prunedCount++;
+                                            }
+                                        } else {
+                                            // Fallback: try to use game.settings if it's registered
+                                            const fullKey = `${namespace}.${key}`;
+                                            if (game.settings.settings.has(fullKey)) {
+                                                const setting = game.settings.settings.get(fullKey);
+                                                const defaultValue = setting.default;
+                                                await game.settings.set(namespace, key, defaultValue);
+                                                prunedCount++;
+                                            }
+                                        }
+                                    } catch (error) {
+                                        console.warn(`COFFEE PUB • MONARCH | Could not prune setting ${namespace}.${key}:`, error);
+                                        errorCount++;
+                                    }
+                                }
+                                
+                                // Show success dialog
+                                const successContent = `
+                                    <h3>Prune Complete</h3>
+                                    <p><strong>Settings pruned:</strong> ${prunedCount}</p>
+                                    ${errorCount > 0 ? `<p class="notes" style="color: #ff6b6b;"><strong>Errors:</strong> ${errorCount} settings could not be pruned</p>` : ''}
+                                    <p><strong>Namespaces cleaned:</strong> ${Object.keys(prunedByNamespace).length}</p>
+                                    <p class="notes">Note: Settings have been reset to their default values. Some settings may require a page reload to take effect.</p>`;
+                                
+                                const successDialog = new Dialog({
+                                    title: "Prune Complete",
+                                    content: successContent,
+                                    buttons: {
+                                        reload: {
+                                            icon: '<i class="fas fa-sync"></i>',
+                                            label: "Reload Now",
+                                            callback: () => window.location.reload()
+                                        },
+                                        close: {
+                                            icon: '<i class="fas fa-times"></i>',
+                                            label: "Close"
+                                        }
+                                    },
+                                    default: "close"
+                                });
+                                successDialog.render(true);
+                                
+                            } catch (error) {
+                                console.error("COFFEE PUB • MONARCH | Error pruning settings:", error);
+                                ui.notifications.error("COFFEE PUB • MONARCH | Failed to prune settings. Check the console for details.");
+                            }
+                        }
+                    },
+                    cancel: {
+                        icon: '<i class="fas fa-times"></i>',
+                        label: "Cancel"
+                    }
+                },
+                default: "proceed"
+            });
+            previewDialog.render(true);
+            } else {
+                // No orphaned settings - show report of all settings
+                const reportList = sortedNamespaces.map(ns => {
+                    const settings = allSettingsByNamespace[ns];
+                    const isInstalled = allModules.has(ns) || allSystems.has(ns) || ns === 'core';
+                    const status = isInstalled ? '<span style="color: #51cf66;">✓ Installed</span>' : '<span style="color: #ff6b6b;">✗ Not Installed</span>';
+                    return `<div style="margin-bottom: 8px;"><strong>${ns}</strong> ${status}: ${settings.length} settings</div>`;
+                }).join('');
+                
+                const totalSettings = Object.values(allSettingsByNamespace).reduce((sum, settings) => sum + settings.length, 0);
+                
+                const reportContent = `
+                    <h3>Settings Report</h3>
+                    <p>All registered settings organized by namespace:</p>
+                    <div class="form-group">
+                        <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9;">
+                            ${reportList}
+                        </div>
+                    </div>
+                    <p><strong>Total:</strong> ${totalSettings} settings across ${sortedNamespaces.length} namespaces</p>
+                    <p class="notes" style="color: #51cf66;">✓ All settings belong to installed modules or systems. No orphaned settings found.</p>`;
+                
+                const reportDialog = new Dialog({
+                    title: "Settings Report",
+                    content: reportContent,
+                    buttons: {
+                        close: {
+                            icon: '<i class="fas fa-times"></i>',
+                            label: "Close"
+                        }
+                    },
+                    default: "close"
+                });
+                reportDialog.render(true);
+            }
+        };
+        
+        // Remove old prune listener if it exists
+        if (oldHandlers?.pruneHandler) {
+            html.removeEventListener('click', oldHandlers.pruneHandler);
+        }
+        
+        // Add new prune listener
+        html.addEventListener('click', pruneHandler);
+        
+        // Store all handlers for cleanup
+        this._handlerStorage.set(html, { importHandler, exportHandler, pruneHandler });
     }
 
     static _onCloseSettingsConfig(app, html) {
@@ -847,6 +1129,9 @@ class CoffeePubMonarch {
                 }
                 if (handlers.exportHandler) {
                     target.removeEventListener('click', handlers.exportHandler);
+                }
+                if (handlers.pruneHandler) {
+                    target.removeEventListener('click', handlers.pruneHandler);
                 }
                 // Clear from storage
                 this._handlerStorage.delete(target);
