@@ -950,48 +950,104 @@ class CoffeePubMonarch {
             // Sort namespaces alphabetically
             const sortedNamespaces = Object.keys(allSettingsByNamespace).sort();
             
-            // If there are orphaned settings, show prune dialog
-            if (settingsToPrune.length > 0) {
-                // Group orphaned settings by namespace for display
-                const prunedByNamespace = {};
-                settingsToPrune.forEach(({ namespace, key }) => {
-                    if (!prunedByNamespace[namespace]) {
-                        prunedByNamespace[namespace] = [];
-                    }
-                    prunedByNamespace[namespace].push(key);
-                });
+            // Create a map of orphaned settings for quick lookup
+            const orphanedSettingsMap = new Set();
+            settingsToPrune.forEach(({ namespace, key }) => {
+                orphanedSettingsMap.add(`${namespace}.${key}`);
+            });
+            
+            // Build the namespace list with checkboxes
+            const namespaceList = sortedNamespaces.map(ns => {
+                const settings = allSettingsByNamespace[ns];
+                const isInstalled = allInstalledModules.has(ns) || allInstalledSystems.has(ns) || ns === 'core';
+                const status = isInstalled ? '<span style="color: #51cf66;">✓ Installed</span>' : '<span style="color: #ff6b6b;">✗ Not Installed</span>';
+                // Pre-check orphaned settings, uncheck installed ones
+                const isChecked = !isInstalled && ns !== 'core';
+                const checkboxId = `monarch-prune-${ns}`;
                 
-                // Show preview dialog
-                const namespaceList = Object.entries(prunedByNamespace)
-                    .map(([ns, keys]) => `<strong>${ns}</strong>: ${keys.length} settings`)
-                    .join('<br>');
+                // List individual settings under each namespace
+                const settingsList = settings.map(key => {
+                    const settingKey = `${ns}.${key}`;
+                    const isOrphaned = orphanedSettingsMap.has(settingKey);
+                    const settingCheckboxId = `monarch-prune-setting-${ns}-${key}`;
+                    const settingChecked = isOrphaned;
+                    return `<div style="margin-left: 20px; font-size: 0.9em; color: #666;">
+                        <input type="checkbox" id="${settingCheckboxId}" class="monarch-setting-checkbox" data-namespace="${ns}" data-key="${key}" ${settingChecked ? 'checked' : ''}>
+                        <label for="${settingCheckboxId}">${key}</label>
+                    </div>`;
+                }).join('');
                 
-                const previewContent = `
-                    <h3>Prune Orphaned Settings</h3>
-                    <p>This will remove settings for modules/systems that are no longer installed.</p>
-                    <div class="form-group">
-                        <label>Settings to be removed:</label>
-                        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9;">
-                            ${namespaceList}
-                        </div>
+                return `<div style="margin-bottom: 10px; padding: 5px; border-left: 3px solid ${isInstalled ? '#51cf66' : '#ff6b6b'}; padding-left: 10px;">
+                    <input type="checkbox" id="${checkboxId}" class="monarch-namespace-checkbox" data-namespace="${ns}" ${isChecked ? 'checked' : ''}>
+                    <label for="${checkboxId}" style="font-weight: bold;">${ns}</label> ${status} <span style="color: #666;">(${settings.length} settings)</span>
+                    ${settingsList}
+                </div>`;
+            }).join('');
+            
+            const totalSettings = Object.values(allSettingsByNamespace).reduce((sum, settings) => sum + settings.length, 0);
+            const orphanedCount = settingsToPrune.length;
+            
+            const combinedContent = `
+                <h3>Settings Report & Prune</h3>
+                <p>Select which settings to prune/reset. Orphaned settings (from uninstalled modules) are pre-checked.</p>
+                <div style="margin-bottom: 10px;">
+                    <button type="button" id="monarch-select-all" style="margin-right: 5px;">Select All</button>
+                    <button type="button" id="monarch-select-none">Select None</button>
+                </div>
+                <div class="form-group">
+                    <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9;">
+                        ${namespaceList}
                     </div>
-                    <p><strong>Total:</strong> ${settingsToPrune.length} settings across ${Object.keys(prunedByNamespace).length} namespaces</p>
-                    <p class="notes" style="color: #ff6b6b;"><strong>Warning:</strong> This action cannot be undone. Make sure you have a backup if you want to restore these settings later.</p>`;
-                
-                const previewDialog = new Dialog({
-                    title: "Prune Orphaned Settings",
-                    content: previewContent,
-                    buttons: {
-                        proceed: {
-                            icon: '<i class="fas fa-broom"></i>',
-                            label: "Prune Settings",
-                            callback: async () => {
+                </div>
+                <p><strong>Total:</strong> ${totalSettings} settings across ${sortedNamespaces.length} namespaces</p>
+                ${orphanedCount > 0 ? `<p class="notes" style="color: #ff6b6b;"><strong>Orphaned:</strong> ${orphanedCount} settings from uninstalled modules (pre-checked)</p>` : '<p class="notes" style="color: #51cf66;">✓ All settings belong to installed modules or systems.</p>'}
+                <p class="notes" style="color: #ff6b6b;"><strong>Warning:</strong> This action cannot be undone. Make sure you have a backup if you want to restore these settings later.</p>`;
+            
+            const combinedDialog = new Dialog({
+                title: "Settings Report & Prune",
+                content: combinedContent,
+                buttons: {
+                    proceed: {
+                        icon: '<i class="fas fa-broom"></i>',
+                        label: "Prune Selected",
+                        callback: async (html) => {
                             try {
+                                // Get all checked settings from the dialog
+                                const checkedSettings = [];
+                                const settingCheckboxes = html.querySelectorAll('.monarch-setting-checkbox:checked');
+                                
+                                settingCheckboxes.forEach(checkbox => {
+                                    const namespace = checkbox.dataset.namespace;
+                                    const key = checkbox.dataset.key;
+                                    const fullKey = `${namespace}.${key}`;
+                                    
+                                    // Find the scope from our stored settings
+                                    const storedSetting = allStoredSettings.get(fullKey);
+                                    if (storedSetting) {
+                                        checkedSettings.push({ namespace, key, scope: storedSetting.scope });
+                                    } else {
+                                        // Fallback: try to determine scope from registered settings
+                                        const registeredSetting = game.settings.settings.get(fullKey);
+                                        if (registeredSetting) {
+                                            checkedSettings.push({ namespace, key, scope: registeredSetting.scope });
+                                        } else {
+                                            // Default to world scope if we can't determine
+                                            checkedSettings.push({ namespace, key, scope: 'world' });
+                                        }
+                                    }
+                                });
+                                
+                                if (checkedSettings.length === 0) {
+                                    ui.notifications.info("No settings selected for pruning.");
+                                    return;
+                                }
+                                
                                 let prunedCount = 0;
                                 let errorCount = 0;
+                                const prunedNamespaces = new Set();
                                 
-                                // Prune settings by removing them from the database
-                                for (const { namespace, key, scope } of settingsToPrune) {
+                                // Prune selected settings
+                                for (const { namespace, key, scope } of checkedSettings) {
                                     try {
                                         // Check permissions (world-scoped requires GM)
                                         if (scope === 'world' && !game.user.isGM) {
@@ -1003,12 +1059,14 @@ class CoffeePubMonarch {
                                             if (game.world?.flags?.[namespace]?.[key] !== undefined) {
                                                 await game.world.unsetFlag(namespace, key);
                                                 prunedCount++;
+                                                prunedNamespaces.add(namespace);
                                             }
                                         } else if (scope === 'client') {
                                             // Remove from user flags
                                             if (game.user?.flags?.[namespace]?.[key] !== undefined) {
                                                 await game.user.unsetFlag(namespace, key);
                                                 prunedCount++;
+                                                prunedNamespaces.add(namespace);
                                             }
                                         } else {
                                             // Fallback: try to use game.settings if it's registered
@@ -1018,6 +1076,7 @@ class CoffeePubMonarch {
                                                 const defaultValue = setting.default;
                                                 await game.settings.set(namespace, key, defaultValue);
                                                 prunedCount++;
+                                                prunedNamespaces.add(namespace);
                                             }
                                         }
                                     } catch (error) {
@@ -1031,7 +1090,7 @@ class CoffeePubMonarch {
                                     <h3>Prune Complete</h3>
                                     <p><strong>Settings pruned:</strong> ${prunedCount}</p>
                                     ${errorCount > 0 ? `<p class="notes" style="color: #ff6b6b;"><strong>Errors:</strong> ${errorCount} settings could not be pruned</p>` : ''}
-                                    <p><strong>Namespaces cleaned:</strong> ${Object.keys(prunedByNamespace).length}</p>
+                                    <p><strong>Namespaces cleaned:</strong> ${prunedNamespaces.size}</p>
                                     <p class="notes">Note: Settings have been reset to their default values. Some settings may require a page reload to take effect.</p>`;
                                 
                                 const successDialog = new Dialog({
@@ -1063,44 +1122,57 @@ class CoffeePubMonarch {
                         label: "Cancel"
                     }
                 },
-                default: "proceed"
+                default: "proceed",
+                render: (html) => {
+                    // Handle both jQuery (v12) and DOM element (v13) formats
+                    const element = html.jquery ? html[0] : html;
+                    
+                    // Add event handlers for namespace checkboxes (toggle all settings in namespace)
+                    element.querySelectorAll('.monarch-namespace-checkbox').forEach(checkbox => {
+                        checkbox.addEventListener('change', function() {
+                            const namespace = this.dataset.namespace;
+                            const isChecked = this.checked;
+                            element.querySelectorAll(`.monarch-setting-checkbox[data-namespace="${namespace}"]`).forEach(settingCheckbox => {
+                                settingCheckbox.checked = isChecked;
+                            });
+                        });
+                    });
+                    
+                    // Add event handlers for setting checkboxes (update namespace checkbox state)
+                    element.querySelectorAll('.monarch-setting-checkbox').forEach(checkbox => {
+                        checkbox.addEventListener('change', function() {
+                            const namespace = this.dataset.namespace;
+                            const namespaceCheckbox = element.querySelector(`.monarch-namespace-checkbox[data-namespace="${namespace}"]`);
+                            const allSettings = element.querySelectorAll(`.monarch-setting-checkbox[data-namespace="${namespace}"]`);
+                            const checkedSettings = element.querySelectorAll(`.monarch-setting-checkbox[data-namespace="${namespace}"]:checked`);
+                            if (namespaceCheckbox) {
+                                namespaceCheckbox.checked = allSettings.length === checkedSettings.length;
+                            }
+                        });
+                    });
+                    
+                    // Select All button
+                    const selectAllBtn = element.querySelector('#monarch-select-all');
+                    if (selectAllBtn) {
+                        selectAllBtn.addEventListener('click', () => {
+                            element.querySelectorAll('.monarch-setting-checkbox, .monarch-namespace-checkbox').forEach(checkbox => {
+                                checkbox.checked = true;
+                            });
+                        });
+                    }
+                    
+                    // Select None button
+                    const selectNoneBtn = element.querySelector('#monarch-select-none');
+                    if (selectNoneBtn) {
+                        selectNoneBtn.addEventListener('click', () => {
+                            element.querySelectorAll('.monarch-setting-checkbox, .monarch-namespace-checkbox').forEach(checkbox => {
+                                checkbox.checked = false;
+                            });
+                        });
+                    }
+                }
             });
-            previewDialog.render(true);
-            } else {
-                // No orphaned settings - show report of all settings
-                const reportList = sortedNamespaces.map(ns => {
-                    const settings = allSettingsByNamespace[ns];
-                    const isInstalled = allModules.has(ns) || allSystems.has(ns) || ns === 'core';
-                    const status = isInstalled ? '<span style="color: #51cf66;">✓ Installed</span>' : '<span style="color: #ff6b6b;">✗ Not Installed</span>';
-                    return `<div style="margin-bottom: 8px;"><strong>${ns}</strong> ${status}: ${settings.length} settings</div>`;
-                }).join('');
-                
-                const totalSettings = Object.values(allSettingsByNamespace).reduce((sum, settings) => sum + settings.length, 0);
-                
-                const reportContent = `
-                    <h3>Settings Report</h3>
-                    <p>All registered settings organized by namespace:</p>
-                    <div class="form-group">
-                        <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9;">
-                            ${reportList}
-                        </div>
-                    </div>
-                    <p><strong>Total:</strong> ${totalSettings} settings across ${sortedNamespaces.length} namespaces</p>
-                    <p class="notes" style="color: #51cf66;">✓ All settings belong to installed modules or systems. No orphaned settings found.</p>`;
-                
-                const reportDialog = new Dialog({
-                    title: "Settings Report",
-                    content: reportContent,
-                    buttons: {
-                        close: {
-                            icon: '<i class="fas fa-times"></i>',
-                            label: "Close"
-                        }
-                    },
-                    default: "close"
-                });
-                reportDialog.render(true);
-            }
+            combinedDialog.render(true);
         };
         
         // Remove old prune listener if it exists
