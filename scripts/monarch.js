@@ -1119,7 +1119,7 @@ class CoffeePubMonarch {
                                         const moduleStillInstalled = game.modules.has(namespace);
                                         if (moduleStillInstalled) {
                                             stillInstalledModules.add(namespace);
-                                            console.warn(`COFFEE PUB • MONARCH | Warning: Module "${namespace}" is still installed. Setting may reappear after refresh if module re-registers it.`);
+                                            console.warn(`COFFEE PUB • MONARCH | Warning: Module "${namespace}" is still installed. Setting will reappear after refresh because the module re-registers it on load.`);
                                         }
                                         
                                         // Also remove from flags if they exist (some settings might be stored as flags)
@@ -1169,9 +1169,15 @@ class CoffeePubMonarch {
                                             }
                                         }
                                         
-                                        if (removed) {
+                                        // Only count as successfully pruned if:
+                                        // 1. The setting was removed from storage, AND
+                                        // 2. The module is NOT still installed (otherwise it will reappear)
+                                        if (removed && !moduleStillInstalled) {
                                             prunedCount++;
                                             prunedNamespaces.add(namespace);
+                                        } else if (removed && moduleStillInstalled) {
+                                            // Setting was removed but module is still installed - it will come back
+                                            console.warn(`COFFEE PUB • MONARCH | Setting ${fullKey} removed but module "${namespace}" is still installed - it will reappear on refresh`);
                                         } else {
                                             console.warn(`COFFEE PUB • MONARCH | Failed to remove ${fullKey} from storage`);
                                             errorCount++;
@@ -1184,7 +1190,16 @@ class CoffeePubMonarch {
                                 
                                 // Show success dialog
                                 const stillInstalledWarning = stillInstalledModules.size > 0 
-                                    ? `<p class="notes" style="color: #ff6b6b;"><strong>Important:</strong> ${stillInstalledModules.size} module(s) are still installed (${Array.from(stillInstalledModules).join(', ')}). Settings from these modules may reappear after refresh if the modules re-register them. To permanently remove settings, uninstall the modules first.</p>`
+                                    ? `<div style="background: #fff3cd; border: 2px solid #ffc107; padding: 10px; margin: 10px 0; border-radius: 4px;">
+                                        <p style="margin: 0; font-weight: bold; color: #856404;"><strong>⚠️ Cannot Permanently Remove Settings</strong></p>
+                                        <p style="margin: 5px 0 0 0; color: #856404;">
+                                            ${stillInstalledModules.size} module(s) are still <strong>installed</strong> (${Array.from(stillInstalledModules).join(', ')}). 
+                                            Settings were removed from storage, but they <strong>will reappear after refresh</strong> because installed modules re-register their settings when Foundry loads.
+                                        </p>
+                                        <p style="margin: 5px 0 0 0; color: #856404;">
+                                            <strong>To permanently remove settings:</strong> Uninstall the modules first (not just disable), then prune the orphaned settings.
+                                        </p>
+                                    </div>`
                                     : '';
                                 
                                 const successContent = `
@@ -1193,7 +1208,7 @@ class CoffeePubMonarch {
                                     ${errorCount > 0 ? `<p class="notes" style="color: #ff6b6b;"><strong>Errors:</strong> ${errorCount} settings could not be pruned</p>` : ''}
                                     <p><strong>Namespaces cleaned:</strong> ${prunedNamespaces.size}</p>
                                     ${stillInstalledWarning}
-                                    <p class="notes">Note: Settings have been removed from the database. If modules are still installed, they may re-register settings on reload.</p>`;
+                                    ${stillInstalledModules.size === 0 ? '<p class="notes">Settings have been permanently removed from the database.</p>' : ''}`;
                                 
                                 const successDialog = new Dialog({
                                     title: "Prune Complete",
