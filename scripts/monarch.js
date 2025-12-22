@@ -1012,9 +1012,21 @@ class CoffeePubMonarch {
                         label: "Prune Selected",
                         callback: async (html) => {
                             try {
+                                // Handle both jQuery (v12) and DOM element (v13) formats
+                                // In v13, Dialog callbacks receive the form element
+                                let element = html;
+                                if (!(html instanceof HTMLElement)) {
+                                    // Try to unwrap if it's a jQuery object or array-like
+                                    element = html?.[0] || html;
+                                }
+                                // If still not an HTMLElement, try to find the dialog content
+                                if (!(element instanceof HTMLElement)) {
+                                    element = document.querySelector('.window-content') || html;
+                                }
+                                
                                 // Get all checked settings from the dialog
                                 const checkedSettings = [];
-                                const settingCheckboxes = html.querySelectorAll('.monarch-setting-checkbox:checked');
+                                const settingCheckboxes = element.querySelectorAll('.monarch-setting-checkbox:checked');
                                 
                                 settingCheckboxes.forEach(checkbox => {
                                     const namespace = checkbox.dataset.namespace;
@@ -1045,8 +1057,9 @@ class CoffeePubMonarch {
                                 let prunedCount = 0;
                                 let errorCount = 0;
                                 const prunedNamespaces = new Set();
+                                const stillInstalledModules = new Set();
                                 
-                                // Prune selected settings
+                                // Prune selected settings by removing them from the database storage
                                 for (const { namespace, key, scope } of checkedSettings) {
                                     try {
                                         // Check permissions (world-scoped requires GM)
@@ -1054,44 +1067,133 @@ class CoffeePubMonarch {
                                             continue; // Skip world-scoped settings if not GM
                                         }
                                         
-                                        if (scope === 'world') {
-                                            // Remove from world flags
-                                            if (game.world?.flags?.[namespace]?.[key] !== undefined) {
-                                                await game.world.unsetFlag(namespace, key);
-                                                prunedCount++;
-                                                prunedNamespaces.add(namespace);
-                                            }
-                                        } else if (scope === 'client') {
-                                            // Remove from user flags
-                                            if (game.user?.flags?.[namespace]?.[key] !== undefined) {
-                                                await game.user.unsetFlag(namespace, key);
-                                                prunedCount++;
-                                                prunedNamespaces.add(namespace);
-                                            }
-                                        } else {
-                                            // Fallback: try to use game.settings if it's registered
-                                            const fullKey = `${namespace}.${key}`;
-                                            if (game.settings.settings.has(fullKey)) {
-                                                const setting = game.settings.settings.get(fullKey);
-                                                const defaultValue = setting.default;
-                                                await game.settings.set(namespace, key, defaultValue);
-                                                prunedCount++;
-                                                prunedNamespaces.add(namespace);
+                                        const fullKey = `${namespace}.${key}`;
+                                        console.log(`COFFEE PUB • MONARCH | Attempting to prune ${fullKey} (scope: ${scope})`);
+                                        
+                                        let removed = false;
+                                        
+                                        // Remove from settings storage (the actual database)
+                                        if (scope === 'world' || !scope) {
+                                            try {
+                                                const worldStorage = game.settings.storage?.get("world");
+                                                if (worldStorage && typeof worldStorage.removeItem === 'function') {
+                                                    await worldStorage.removeItem(fullKey);
+                                                    // Verify it was actually removed
+                                                    const stillExists = await worldStorage.getItem(fullKey);
+                                                    if (stillExists !== null) {
+                                                        console.warn(`COFFEE PUB • MONARCH | Warning: ${fullKey} still exists in world storage after removal`);
+                                                    } else {
+                                                        console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from world storage (verified)`);
+                                                        removed = true;
+                                                    }
+                                                } else {
+                                                    console.warn(`COFFEE PUB • MONARCH | World storage not available or removeItem not a function for ${fullKey}`);
+                                                }
+                                            } catch (error) {
+                                                console.warn(`COFFEE PUB • MONARCH | Could not remove world setting ${fullKey}:`, error);
                                             }
                                         }
+                                        
+                                        if (scope === 'client' || (!removed && !scope)) {
+                                            try {
+                                                const clientStorage = game.settings.storage?.get("client");
+                                                if (clientStorage && typeof clientStorage.removeItem === 'function') {
+                                                    await clientStorage.removeItem(fullKey);
+                                                    // Verify it was actually removed
+                                                    const stillExists = await clientStorage.getItem(fullKey);
+                                                    if (stillExists !== null) {
+                                                        console.warn(`COFFEE PUB • MONARCH | Warning: ${fullKey} still exists in client storage after removal`);
+                                                    } else {
+                                                        console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from client storage (verified)`);
+                                                        removed = true;
+                                                    }
+                                                } else {
+                                                    console.warn(`COFFEE PUB • MONARCH | Client storage not available or removeItem not a function for ${fullKey}`);
+                                                }
+                                            } catch (error) {
+                                                console.warn(`COFFEE PUB • MONARCH | Could not remove client setting ${fullKey}:`, error);
+                                            }
+                                        }
+                                        
+                                        // Check if module is still installed (which would cause setting to reappear)
+                                        const moduleStillInstalled = game.modules.has(namespace);
+                                        if (moduleStillInstalled) {
+                                            stillInstalledModules.add(namespace);
+                                            console.warn(`COFFEE PUB • MONARCH | Warning: Module "${namespace}" is still installed. Setting may reappear after refresh if module re-registers it.`);
+                                        }
+                                        
+                                        // Also remove from flags if they exist (some settings might be stored as flags)
+                                        if (scope === 'world' && game.world?.flags?.[namespace]?.[key] !== undefined) {
+                                            try {
+                                                // Try unsetFlag if namespace is active
+                                                try {
+                                                    await game.world.unsetFlag(namespace, key);
+                                                    console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from world flags via unsetFlag`);
+                                                } catch (flagError) {
+                                                    // If unsetFlag fails, directly manipulate flags
+                                                    const sourceFlags = foundry.utils.deepClone(game.world._source?.flags || game.world.flags || {});
+                                                    if (sourceFlags[namespace] && sourceFlags[namespace][key] !== undefined) {
+                                                        delete sourceFlags[namespace][key];
+                                                        if (Object.keys(sourceFlags[namespace]).length === 0) {
+                                                            delete sourceFlags[namespace];
+                                                        }
+                                                        await game.world.updateSource({ flags: sourceFlags });
+                                                        console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from world flags via updateSource`);
+                                                    }
+                                                }
+                                            } catch (error) {
+                                                console.warn(`COFFEE PUB • MONARCH | Could not remove world flag ${fullKey}:`, error);
+                                            }
+                                        }
+                                        
+                                        if (scope === 'client' && game.user?.flags?.[namespace]?.[key] !== undefined) {
+                                            try {
+                                                // Try unsetFlag if namespace is active
+                                                try {
+                                                    await game.user.unsetFlag(namespace, key);
+                                                    console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from user flags via unsetFlag`);
+                                                } catch (flagError) {
+                                                    // If unsetFlag fails, directly manipulate flags
+                                                    const sourceFlags = foundry.utils.deepClone(game.user._source?.flags || game.user.flags || {});
+                                                    if (sourceFlags[namespace] && sourceFlags[namespace][key] !== undefined) {
+                                                        delete sourceFlags[namespace][key];
+                                                        if (Object.keys(sourceFlags[namespace]).length === 0) {
+                                                            delete sourceFlags[namespace];
+                                                        }
+                                                        await game.user.updateSource({ flags: sourceFlags });
+                                                        console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from user flags via updateSource`);
+                                                    }
+                                                }
+                                            } catch (error) {
+                                                console.warn(`COFFEE PUB • MONARCH | Could not remove user flag ${fullKey}:`, error);
+                                            }
+                                        }
+                                        
+                                        if (removed) {
+                                            prunedCount++;
+                                            prunedNamespaces.add(namespace);
+                                        } else {
+                                            console.warn(`COFFEE PUB • MONARCH | Failed to remove ${fullKey} from storage`);
+                                            errorCount++;
+                                        }
                                     } catch (error) {
-                                        console.warn(`COFFEE PUB • MONARCH | Could not prune setting ${namespace}.${key}:`, error);
+                                        console.error(`COFFEE PUB • MONARCH | Error pruning setting ${namespace}.${key}:`, error);
                                         errorCount++;
                                     }
                                 }
                                 
                                 // Show success dialog
+                                const stillInstalledWarning = stillInstalledModules.size > 0 
+                                    ? `<p class="notes" style="color: #ff6b6b;"><strong>Important:</strong> ${stillInstalledModules.size} module(s) are still installed (${Array.from(stillInstalledModules).join(', ')}). Settings from these modules may reappear after refresh if the modules re-register them. To permanently remove settings, uninstall the modules first.</p>`
+                                    : '';
+                                
                                 const successContent = `
                                     <h3>Prune Complete</h3>
                                     <p><strong>Settings pruned:</strong> ${prunedCount}</p>
                                     ${errorCount > 0 ? `<p class="notes" style="color: #ff6b6b;"><strong>Errors:</strong> ${errorCount} settings could not be pruned</p>` : ''}
                                     <p><strong>Namespaces cleaned:</strong> ${prunedNamespaces.size}</p>
-                                    <p class="notes">Note: Settings have been reset to their default values. Some settings may require a page reload to take effect.</p>`;
+                                    ${stillInstalledWarning}
+                                    <p class="notes">Note: Settings have been removed from the database. If modules are still installed, they may re-register settings on reload.</p>`;
                                 
                                 const successDialog = new Dialog({
                                     title: "Prune Complete",
