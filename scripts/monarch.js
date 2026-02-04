@@ -258,10 +258,49 @@ class CoffeePubMonarch {
         
         // Bind event listeners - use app.element if available for better coverage
         const listenerTarget = app.element || html;
-        this._activateSettingsWindowListeners(listenerTarget);
+
+        // Add a non-filtering "jump to setting" search just above the categories sections
+        let categoriesSection = null;
+        let jumpInput = null;
+        let prevBtn = null;
+        let nextBtn = null;
+        if (listenerTarget?.querySelector) {
+            // Parent container that holds all category sections/tabs
+            const categoriesContainer = listenerTarget.querySelector('div.categories.flexcol');
+            if (categoriesContainer) {
+                categoriesSection = categoriesContainer; // use this for match searching scope
+
+                let jumpContainer = categoriesContainer.querySelector('.monarch-settings-jump');
+                if (!jumpContainer) {
+                    jumpContainer = document.createElement('div');
+                    jumpContainer.className = 'monarch-settings-jump';
+                    jumpContainer.innerHTML = `
+                        <div class="monarch-jump-row">
+                            <label class="monarch-jump-label" aria-label="Jump to setting">
+                                <i class="fas fa-location-arrow" aria-hidden="true"></i>
+                            </label>
+                            <input type="search" class="monarch-jump-input" placeholder="Type to jump (does not filter)" autocomplete="off" aria-label="Jump to setting (does not hide results)">
+                            <div class="monarch-jump-controls">
+                                <button type="button" class="monarch-jump-prev"><i class="fas fa-chevron-up"></i> Prev</button>
+                                <button type="button" class="monarch-jump-next">Next <i class="fas fa-chevron-down"></i></button>
+                            </div>
+                        </div>
+                        <p class="monarch-jump-status" aria-live="polite"></p>
+                    `;
+                    categoriesContainer.insertBefore(jumpContainer, categoriesContainer.firstChild);
+                }
+
+                jumpInput = categoriesContainer.querySelector('.monarch-jump-input');
+                prevBtn = categoriesContainer.querySelector('.monarch-jump-prev');
+                nextBtn = categoriesContainer.querySelector('.monarch-jump-next');
+            }
+        }
+
+        this._activateSettingsWindowListeners(listenerTarget, { categoriesSection, jumpInput, prevBtn, nextBtn });
     }
 
-    static _activateSettingsWindowListeners(html) {
+    static _activateSettingsWindowListeners(html, options = {}) {
+        const { categoriesSection = null, jumpInput = null, prevBtn = null, nextBtn = null } = options;
         // Use event delegation for better cleanup - bind to the html element itself
         // This ensures listeners are cleaned up when the window closes
         // Store handler references for cleanup
@@ -745,6 +784,18 @@ class CoffeePubMonarch {
         const oldHandlers = this._handlerStorage.get(html);
         if (oldHandlers?.importHandler) {
             html.removeEventListener('click', oldHandlers.importHandler);
+        }
+        if (oldHandlers?.jumpInput && oldHandlers.jumpInputHandler) {
+            oldHandlers.jumpInput.removeEventListener('input', oldHandlers.jumpInputHandler);
+        }
+        if (oldHandlers?.jumpInput && oldHandlers.jumpKeyHandler) {
+            oldHandlers.jumpInput.removeEventListener('keydown', oldHandlers.jumpKeyHandler);
+        }
+        if (oldHandlers?.prevBtn && oldHandlers.prevHandler) {
+            oldHandlers.prevBtn.removeEventListener('click', oldHandlers.prevHandler);
+        }
+        if (oldHandlers?.nextBtn && oldHandlers.nextHandler) {
+            oldHandlers.nextBtn.removeEventListener('click', oldHandlers.nextHandler);
         }
         
         // Add new listener
@@ -1296,12 +1347,107 @@ class CoffeePubMonarch {
         if (oldHandlers?.pruneHandler) {
             html.removeEventListener('click', oldHandlers.pruneHandler);
         }
-        
+
         // Add new prune listener
         html.addEventListener('click', pruneHandler);
-        
+
+        // Non-filtering jump search inside categories tab
+        let jumpInputHandler = null;
+        let jumpKeyHandler = null;
+        let prevHandler = null;
+        let nextHandler = null;
+        if (categoriesSection && jumpInput) {
+            const statusElement = categoriesSection.querySelector('.monarch-jump-status');
+
+            const clearHighlights = () => {
+                categoriesSection.querySelectorAll('.monarch-jump-highlight').forEach((node) => {
+                    node.classList.remove('monarch-jump-highlight');
+                });
+            };
+
+            const getSettingElements = () => {
+                const selectors = ['li.setting', '.setting', '.form-group'];
+                const elements = selectors.flatMap((sel) => Array.from(categoriesSection.querySelectorAll(sel)));
+                const unique = Array.from(new Set(elements));
+                return unique.filter((el) => !el.closest('.monarch-settings-jump'));
+            };
+
+            const labelText = (element) => {
+                const label = element.querySelector('label, h2, h3, h4, .setting-name, .title');
+                const dataId = element.dataset?.settingId || element.dataset?.key || '';
+                const text = (label?.textContent || element.textContent || '').replace(/\s+/g, ' ').trim();
+                return `${dataId} ${text}`.toLowerCase();
+            };
+
+            const focusMatch = (match, index, total) => {
+                clearHighlights();
+                match.classList.add('monarch-jump-highlight');
+                match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (statusElement) {
+                    statusElement.textContent = total > 0 ? `Showing ${index + 1} of ${total}` : '';
+                }
+            };
+
+            const findMatches = (query) => {
+                const needle = query.toLowerCase();
+                return getSettingElements().filter((el) => labelText(el).includes(needle));
+            };
+
+            let currentQuery = '';
+            let currentIndex = -1;
+            let matches = [];
+
+            jumpInputHandler = (event) => {
+                const value = event.target.value.trim();
+                currentQuery = value;
+                currentIndex = -1;
+
+                if (!value) {
+                    clearHighlights();
+                    if (statusElement) statusElement.textContent = '';
+                    return;
+                }
+
+                matches = findMatches(value);
+                if (!matches.length) {
+                    clearHighlights();
+                    if (statusElement) statusElement.textContent = 'No matches';
+                    return;
+                }
+
+                currentIndex = 0;
+                focusMatch(matches[0], currentIndex, matches.length);
+            };
+
+            jumpKeyHandler = (event) => {
+                // Prevent form submit on Enter; navigation uses buttons
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                }
+            };
+
+            prevHandler = (event) => {
+                event.preventDefault();
+                if (!matches.length) return;
+                currentIndex = (currentIndex - 1 + matches.length) % matches.length;
+                focusMatch(matches[currentIndex], currentIndex, matches.length);
+            };
+
+            nextHandler = (event) => {
+                event.preventDefault();
+                if (!matches.length) return;
+                currentIndex = (currentIndex + 1) % matches.length;
+                focusMatch(matches[currentIndex], currentIndex, matches.length);
+            };
+
+            jumpInput.addEventListener('input', jumpInputHandler);
+            jumpInput.addEventListener('keydown', jumpKeyHandler);
+            if (prevBtn) prevBtn.addEventListener('click', prevHandler);
+            if (nextBtn) nextBtn.addEventListener('click', nextHandler);
+        }
+
         // Store all handlers for cleanup
-        this._handlerStorage.set(html, { importHandler, exportHandler, pruneHandler });
+        this._handlerStorage.set(html, { importHandler, exportHandler, pruneHandler, jumpInput, jumpInputHandler, jumpKeyHandler, prevBtn, prevHandler, nextBtn, nextHandler });
     }
 
     static _onCloseSettingsConfig(app, html) {

@@ -78,3 +78,67 @@
     gap: 5px;
     box-sizing: border-box;   /* ensure padding doesn't exceed width */
 }
+
+/* Non-filtering jump search in settings categories */
+.monarch-settings-jump {
+    border: 1px solid var(--color-border-light-tertiary);
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 10px;
+    background: var(--color-bg-light-4);
+}
+
+.monarch-jump-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.monarch-jump-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.monarch-jump-input {
+    flex: 1;
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--color-border-light-tertiary);
+    border-radius: 4px;
+    background: var(--color-bg-light-3);
+}
+
+.monarch-jump-hint {
+    margin: 6px 0 2px;
+    font-size: 0.85em;
+    color: var(--color-text-light-7);
+}
+
+.monarch-jump-controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.monarch-jump-controls button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    padding: 6px 10px;
+}
+
+.monarch-jump-status {
+    margin: 0;
+    font-size: 0.9em;
+    color: var(--color-text-primary);
+}
+
+.monarch-jump-highlight {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    scroll-margin: 60px;
+}
