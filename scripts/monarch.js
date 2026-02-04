@@ -276,13 +276,10 @@ class CoffeePubMonarch {
                     jumpContainer.className = 'monarch-settings-jump';
                     jumpContainer.innerHTML = `
                         <div class="monarch-jump-row">
-                            <label class="monarch-jump-label" aria-label="Jump to setting">
-                                <i class="fas fa-location-arrow" aria-hidden="true"></i>
-                            </label>
-                            <input type="search" class="monarch-jump-input" placeholder="Type to jump (does not filter)" autocomplete="off" aria-label="Jump to setting (does not hide results)">
+                            <input type="search" class="monarch-jump-input" placeholder="Type to jump to setting..." autocomplete="off" aria-label="Jump to setting (does not hide results)">
                             <div class="monarch-jump-controls">
-                                <button type="button" class="monarch-jump-prev"><i class="fas fa-chevron-up"></i> Prev</button>
-                                <button type="button" class="monarch-jump-next">Next <i class="fas fa-chevron-down"></i></button>
+                                <button type="button" class="monarch-jump-prev"><i class="fas fa-chevron-up"></i></button>
+                                <button type="button" class="monarch-jump-next"><i class="fas fa-chevron-down"></i></button>
                             </div>
                         </div>
                         <p class="monarch-jump-status" aria-live="polite"></p>
@@ -867,15 +864,22 @@ class CoffeePubMonarch {
             };
             
             const now = new Date();
-            const timestamp = now.toISOString().replace(/:/g, '-').replace(/\./g, '-');
-            const filename = `CoffeePub-MONARCH-Settings-Export-${timestamp}.json`;
+            const pad = n => String(n).padStart(2, '0');
+            const timestamp =
+                `${now.getFullYear()}-` +
+                `${pad(now.getMonth() + 1)}-` +
+                `${pad(now.getDate())}-` +
+                `${pad(now.getHours())}-` +
+                `${pad(now.getMinutes())}-` +
+                `${pad(now.getSeconds())}`;
+            const filename = `monarch-settings-${timestamp}.json`;
             const data = JSON.stringify(exportData, null, 2);
             
             // Use Foundry's built-in saveDataToFile
             saveDataToFile(data, "text/json", filename);
             
             // Show success notification
-            ui.notifications.info(`All settings exported successfully! (${exportData.totalSettings} settings across ${Object.keys(out).length} namespaces)`);
+            ui.notifications.info(`Settings exported successfully to ${filename}. (${exportData.totalSettings} settings across ${Object.keys(out).length} namespaces)`);
         };
         
         // Remove old export listener if it exists
@@ -1011,7 +1015,7 @@ class CoffeePubMonarch {
             const namespaceList = sortedNamespaces.map(ns => {
                 const settings = allSettingsByNamespace[ns];
                 const isInstalled = allInstalledModules.has(ns) || allInstalledSystems.has(ns) || ns === 'core';
-                const status = isInstalled ? '<span style="color: #51cf66;">✓ Installed</span>' : '<span style="color: #ff6b6b;">✗ Not Installed</span>';
+                const status = isInstalled ? '<span style="color: #51cf66;">✓ Installed</span>' : '<span style="color: #ff6b6b;">✗ Missing</span>';
                 // Pre-check orphaned settings, uncheck installed ones
                 const isChecked = !isInstalled && ns !== 'core';
                 const checkboxId = `monarch-prune-${ns}`;
@@ -1040,7 +1044,8 @@ class CoffeePubMonarch {
             
             const combinedContent = `
                 <h3>Settings Report & Prune</h3>
-                <p>Select which settings to prune/reset. Orphaned settings (from uninstalled modules) are pre-checked.</p>
+                <p>NOTE: Pruning is in very early development and may not work as expected. Right now it is best used to identify orphaned settings, but removing them is liekly to fail. Use at your own risk.</p>
+                <p>Orphaned settings (from missing modules) are pre-checked.</p>
                 <div style="margin-bottom: 10px;">
                     <button type="button" id="monarch-select-all" style="margin-right: 5px;">Select All</button>
                     <button type="button" id="monarch-select-none">Select None</button>
@@ -1365,9 +1370,16 @@ class CoffeePubMonarch {
                 });
             };
 
+            const getActiveTab = () => {
+                return categoriesSection.querySelector('section.tab.active') ||
+                       categoriesSection.querySelector('section.tab.scrollable') ||
+                       categoriesSection;
+            };
+
             const getSettingElements = () => {
+                const scope = getActiveTab();
                 const selectors = ['li.setting', '.setting', '.form-group'];
-                const elements = selectors.flatMap((sel) => Array.from(categoriesSection.querySelectorAll(sel)));
+                const elements = selectors.flatMap((sel) => Array.from(scope.querySelectorAll(sel)));
                 const unique = Array.from(new Set(elements));
                 return unique.filter((el) => !el.closest('.monarch-settings-jump'));
             };
@@ -1382,7 +1394,20 @@ class CoffeePubMonarch {
             const focusMatch = (match, index, total) => {
                 clearHighlights();
                 match.classList.add('monarch-jump-highlight');
-                match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                const scrollParent = match.closest('.tab.scrollable') ||
+                                     match.closest('section.tab') ||
+                                     getActiveTab() ||
+                                     null;
+                if (scrollParent) {
+                    const parentRect = scrollParent.getBoundingClientRect();
+                    const matchRect = match.getBoundingClientRect();
+                    const offset = matchRect.top - parentRect.top - 20; // small padding
+                    scrollParent.scrollTop += offset;
+                } else {
+                    match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+
                 if (statusElement) {
                     statusElement.textContent = total > 0 ? `Showing ${index + 1} of ${total}` : '';
                 }
@@ -1890,13 +1915,24 @@ class CoffeePubMonarch {
                 };
                 
                 const now = new Date();
-                const date = now.toISOString().split('T')[0];
-                const time = `${now.getHours()}-${now.getMinutes()}`;
-                const filename = `monarch-${date}-${time}.json`;
+                const pad = n => String(n).padStart(2, '0');
+                const timestamp =
+                    `${now.getFullYear()}-` +
+                    `${pad(now.getMonth() + 1)}-` +
+                    `${pad(now.getDate())}-` +
+                    `${pad(now.getHours())}-` +
+                    `${pad(now.getMinutes())}-` +
+                    `${pad(now.getSeconds())}`;
+                const filename = `monarch-module-sets-${timestamp}.json`;
                 const data = JSON.stringify(exportData, null, 2);
-                
                 // Use Foundry's built-in saveDataToFile
                 saveDataToFile(data, "text/json", filename);
+
+                // Show success notification
+                ui.notifications.info(`Module Sets exported successfully to ${filename}.`);
+
+
+
             });
         }
 

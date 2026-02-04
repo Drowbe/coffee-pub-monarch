@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [13.0.2]
+
+### Added
+- **Jump to setting (Settings window)**: A second search at the top of the Settings window categories list that scrolls to matching settings without hiding any items. Type to jump to the first match; use the prev/next buttons to cycle through multiple matches. Shows status text (e.g. "Showing 1 of 3") and highlights the focused item. All categories and settings remain visible—only the scroll position changes.
+
+### Improved
+- **Settings window UX**: Jump search uses the active category tab and matches against setting labels/names. Event listeners and highlights are cleaned up when the Settings window closes.
+
 ## [13.0.1] - FoundryVTT v13 Stable
 
 ### Fixed
