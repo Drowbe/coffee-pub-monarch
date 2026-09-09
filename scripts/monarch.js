@@ -56,15 +56,21 @@ class CoffeePubMonarch {
         Hooks.on('closeExtendedSettingsConfig', this._onCloseSettingsConfig.bind(this));
         
         // Hook into module dependency changes.
-        // The dependency prompt is an ApplicationV2 (core `DependencyResolution`), so it fires
-        // `closeDependencyResolution` rather than `renderDialog`. It commits by setting the module
-        // checkboxes directly (`ModuleManagement#_onSelectDependencies`) without dispatching a
-        // `change` event, so nothing else tells us the states moved — we refresh on close.
-        // `closeOnSubmit` is true, so this covers the confirm path; a cancel just refreshes redundantly.
+        //
+        // The dependency prompt is `foundry.applications.settings.DependencyResolution`, an
+        // ApplicationV2 — so it fires `closeDependencyResolution`, never `renderDialog`. It commits
+        // by setting the module checkboxes directly (`ModuleManagement#_onSelectDependencies`)
+        // without dispatching a `change` event, so nothing else tells us the states moved.
+        // Its `form.closeOnSubmit` is true, so confirming routes through close as well; cancelling
+        // just refreshes redundantly, which is cheap.
+        //
+        // Verified on Foundry 14.367: renderDependencyResolution and closeDependencyResolution both
+        // fire, and renderDialog/closeDialog stay silent.
         Hooks.on('closeDependencyResolution', () => this._refreshModuleManagementUI());
 
-        // Legacy fallback for any build where the prompt is still an AppV1 Dialog. Guarded so an
-        // AppV2 dialog (which has no `.data`) cannot throw here.
+        // Legacy fallback for Foundry 13, where this prompt may still be an AppV1 Dialog. Confirmed
+        // dead on v14 (renderDialog never fires for it) and guarded so an AppV2 dialog — which has
+        // no `.data` — cannot throw here. Delete this once module.json's minimum reaches 14.
         Hooks.on('renderDialog', (dialog, html) => {
             if (dialog?.data?.title !== "Manage Module Dependencies") return;
             const confirmBtn = html?.querySelector?.('button.yes');
@@ -983,32 +989,29 @@ class CoffeePubMonarch {
                 }
             }
 
-            // Client-scoped settings: localStorage, keyed exactly as "namespace.key".
+            // Client-scoped settings are DELIBERATELY NOT COLLECTED FOR PRUNING.
             //
-            // localStorage is shared with anything else running on this origin, and the orphan
-            // test below (namespace is not an installed package) would happily flag an unrelated
-            // dotted key for deletion. So a client entry must also LOOK like a Foundry setting:
-            // a package-id-shaped namespace, and a JSON value — core always writes client
-            // settings as JSON via ClientSettings##setClient. Anything else is left alone.
-            const PACKAGE_ID = /^[A-Za-z0-9_-]+$/;
-            const clientStorage = game.settings.storage?.get('client');
-            if (clientStorage && typeof clientStorage.key === 'function') {
-                for (let i = 0; i < clientStorage.length; i++) {
-                    const fullKey = clientStorage.key(i);
-                    if (!fullKey) continue;
-
-                    const parts = splitKey(fullKey);
-                    if (!parts || !PACKAGE_ID.test(parts.namespace)) continue;
-
-                    try {
-                        JSON.parse(clientStorage.getItem(fullKey));
-                    } catch (err) {
-                        continue; // Not a Foundry client setting — not ours to touch.
-                    }
-
-                    recordSetting(fullKey, 'client');
-                }
-            }
+            // They live in localStorage, which is shared with everything else on this origin and
+            // is not self-identifying: there is no way to tell an orphaned client setting from
+            // arbitrary data a module chose to store. The orphan test is "namespace is not an
+            // installed package", and the text before the first dot is simply not a namespace —
+            // modules write multi-part keys, embedded UUIDs, caches and credentials.
+            //
+            // This was measured on a live world rather than reasoned about. A filter requiring a
+            // package-id-shaped prefix AND a JSON-parseable value still put 181 keys in the
+            // delete list, including `forge-vtt.apiKey` (a live JWT credential, whose namespace
+            // is not an installed module) and `recycle-bin.<world>.bin` (recoverable deleted
+            // documents). The JSON gate rejected 0 of 664 keys — every value parsed, including
+            // both of those. No heuristic over this store is safe.
+            //
+            // The world store below has no such problem: every row in it IS a Setting document,
+            // so membership is proof, not inference. Prune operates only there. Registered client
+            // settings still appear in the report via the registry pass further down; they are
+            // just never offered for deletion.
+            //
+            // If client-scope pruning is ever wanted, it needs a positive identification of each
+            // key as a setting — not an exclusion test. Note that this yields nothing by
+            // construction, since an orphaned setting is precisely one no longer in the registry.
 
             // Also include registered settings for the report (they might not be in flags yet)
             if (game.settings?.settings) {
@@ -1081,8 +1084,9 @@ class CoffeePubMonarch {
             
             const combinedContent = `
                 <h3>Settings Report & Prune</h3>
-                <p>NOTE: Pruning is in very early development and may not work as expected. Right now it is best used to identify orphaned settings, but removing them is liekly to fail. Use at your own risk.</p>
+                <p>NOTE: Pruning is still young. Removal now goes through Foundry's Setting documents, so it should genuinely delete — back up your world before a large prune.</p>
                 <p>Orphaned settings (from missing modules) are pre-checked.</p>
+                <p>Only world- and user-scoped settings can be pruned. Client-scoped settings live in browser storage alongside data modules keep there for their own purposes — including credentials and recoverable documents — which cannot be reliably told apart from settings, so orphaned client entries are neither listed nor removed.</p>
                 <div style="margin-bottom: 10px;">
                     <button type="button" id="monarch-select-all" style="margin-right: 5px;">Select All</button>
                     <button type="button" id="monarch-select-none">Select None</button>
@@ -1151,6 +1155,7 @@ class CoffeePubMonarch {
                                 
                                 let prunedCount = 0;
                                 let errorCount = 0;
+                                let skippedClientCount = 0;  // client-scoped rows are never pruned (see below)
                                 const prunedNamespaces = new Set();
                                 const stillInstalledModules = new Set();
                                 
@@ -1195,25 +1200,16 @@ class CoffeePubMonarch {
                                             }
                                         }
 
-                                        // Client-scoped settings really are localStorage entries.
-                                        if (scope === 'client' || (!removed && !scope)) {
-                                            try {
-                                                const clientStorage = game.settings.storage?.get('client');
-                                                if (clientStorage && typeof clientStorage.removeItem === 'function') {
-                                                    clientStorage.removeItem(fullKey);
-                                                    // Verify it was actually removed
-                                                    if (clientStorage.getItem(fullKey) !== null) {
-                                                        console.warn(`COFFEE PUB • MONARCH | Warning: ${fullKey} still exists in client storage after removal`);
-                                                    } else {
-                                                        console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from client storage (verified)`);
-                                                        removed = true;
-                                                    }
-                                                } else {
-                                                    console.warn(`COFFEE PUB • MONARCH | Client storage not available for ${fullKey}`);
-                                                }
-                                            } catch (error) {
-                                                console.warn(`COFFEE PUB • MONARCH | Could not remove client setting ${fullKey}:`, error);
-                                            }
+                                        // Client scope is never pruned. localStorage cannot be shown to
+                                        // contain a setting rather than arbitrary module data, and deleting
+                                        // the wrong key there has destroyed credentials and recoverable
+                                        // documents in testing. See the discovery block above. Nothing should
+                                        // put a client-scoped row in front of the user, so this is a
+                                        // backstop rather than an expected path.
+                                        if (scope === 'client') {
+                                            console.warn(`COFFEE PUB • MONARCH | Refusing to prune client-scoped ${fullKey}: localStorage entries are not safely identifiable as settings.`);
+                                            skippedClientCount++;
+                                            continue;
                                         }
 
                                         // Check if module is still installed (which would cause setting to reappear)
@@ -1265,6 +1261,7 @@ class CoffeePubMonarch {
                                     <h3>Prune Complete</h3>
                                     <p><strong>Settings pruned:</strong> ${prunedCount}</p>
                                     ${errorCount > 0 ? `<p class="notes" style="color: #ff6b6b;"><strong>Errors:</strong> ${errorCount} settings could not be pruned</p>` : ''}
+                                    ${skippedClientCount > 0 ? `<p class="notes"><strong>Skipped:</strong> ${skippedClientCount} client-scoped setting(s). These live in browser storage, which cannot be distinguished from other data modules keep there, so Monarch never deletes from it.</p>` : ''}
                                     <p><strong>Namespaces cleaned:</strong> ${prunedNamespaces.size}</p>
                                     ${stillInstalledWarning}
                                     ${stillInstalledModules.size === 0 ? '<p class="notes">Settings have been permanently removed from the database.</p>' : ''}`;
