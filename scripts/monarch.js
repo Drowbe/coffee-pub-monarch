@@ -16,6 +16,20 @@ class CoffeePubMonarch {
         moduleSetControls: `modules/${this.ID}/templates/monarch-controls.hbs`
     };
 
+    /**
+     * Selectors for core's Settings window, which is an ApplicationV2 CategoryBrowser.
+     * Each list carries the v14 form first and the v13 form after, so one codebase serves both.
+     *
+     * v14 renamed the reset button (`reset-all` -> `reset-defaults`, templates/category-browser/reset.hbs)
+     * and dropped the `sidebar` class from the <aside> (it is now identified by its AppV2 part name).
+     * Note that `aside.sidebar .reset-all` still appears in v14's foundry2.css as a dead rule, so
+     * grepping the install for the old names finds hits that no template actually renders.
+     */
+    static SETTINGS_SELECTORS = {
+        resetButton: 'button.reset-defaults, button.reset-all',
+        sidebar: 'aside[data-application-part="sidebar"], aside.sidebar, .sidebar'
+    };
+
     // WeakMap for storing handler functions on DOM elements (replaces jQuery .data())
     static _handlerStorage = new WeakMap();
 
@@ -41,32 +55,38 @@ class CoffeePubMonarch {
         Hooks.on('closeSettingsConfig', this._onCloseSettingsConfig.bind(this));
         Hooks.on('closeExtendedSettingsConfig', this._onCloseSettingsConfig.bind(this));
         
-        // Hook into module dependency changes
+        // Hook into module dependency changes.
+        // The dependency prompt is an ApplicationV2 (core `DependencyResolution`), so it fires
+        // `closeDependencyResolution` rather than `renderDialog`. It commits by setting the module
+        // checkboxes directly (`ModuleManagement#_onSelectDependencies`) without dispatching a
+        // `change` event, so nothing else tells us the states moved — we refresh on close.
+        // `closeOnSubmit` is true, so this covers the confirm path; a cancel just refreshes redundantly.
+        Hooks.on('closeDependencyResolution', () => this._refreshModuleManagementUI());
+
+        // Legacy fallback for any build where the prompt is still an AppV1 Dialog. Guarded so an
+        // AppV2 dialog (which has no `.data`) cannot throw here.
         Hooks.on('renderDialog', (dialog, html) => {
-            if (dialog.data.title === "Manage Module Dependencies") {
-                // Find the confirm button and add our listener
-                const confirmBtn = html.querySelector('button.yes');
-                if (confirmBtn) {
-                    confirmBtn.addEventListener('click', () => {
-                        // Use setTimeout to ensure the module states have been updated
-                        setTimeout(() => {
-                            // Find the module management window
-                            const moduleManager = document.querySelector('#module-management');
-                            if (!moduleManager) return;
-                            
-                            // Get our stored event handlers from WeakMap
-                            const handlers = this._handlerStorage.get(moduleManager);
-                            const updateCurrentStateHighlight = handlers?.updateCurrentStateHighlight;
-                            const updateButtonVisibility = handlers?.updateButtonVisibility;
-                            
-                            // Update our UI if we have the handlers
-                            if (updateCurrentStateHighlight) updateCurrentStateHighlight();
-                            if (updateButtonVisibility) updateButtonVisibility();
-                        }, 100); // Give a bit more time for the changes to apply
-                    });
-                }
-            }
+            if (dialog?.data?.title !== "Manage Module Dependencies") return;
+            const confirmBtn = html?.querySelector?.('button.yes');
+            if (!confirmBtn) return;
+            confirmBtn.addEventListener('click', () => this._refreshModuleManagementUI());
         });
+    }
+
+    /**
+     * Re-run our Module Management decorations after module states change outside our own UI.
+     * Handlers are stashed per-window in the WeakMap by _activateListeners.
+     */
+    static _refreshModuleManagementUI() {
+        // Defer so the checkbox states have settled before we read them.
+        setTimeout(() => {
+            const moduleManager = document.querySelector('#module-management');
+            if (!moduleManager) return;
+
+            const handlers = this._handlerStorage.get(moduleManager);
+            handlers?.updateCurrentStateHighlight?.();
+            handlers?.updateButtonVisibility?.();
+        }, 100);
     }
 
     static async _initializeDefaultSet() {
@@ -195,21 +215,21 @@ class CoffeePubMonarch {
         
         // Find the Reset Defaults button - search in sidebar, html, and app.element
         // The button might be in the sidebar, window footer, or main content
-        let resetButton = html.querySelector('button.reset-all');
+        let resetButton = html.querySelector(this.SETTINGS_SELECTORS.resetButton);
         if (!resetButton && app.element) {
-            resetButton = app.element.querySelector('button.reset-all');
+            resetButton = app.element.querySelector(this.SETTINGS_SELECTORS.resetButton);
         }
         // Also check sidebar specifically
         if (!resetButton) {
-            const sidebar = html.querySelector('aside.sidebar, .sidebar');
+            const sidebar = html.querySelector(this.SETTINGS_SELECTORS.sidebar);
             if (sidebar) {
-                resetButton = sidebar.querySelector('button.reset-all');
+                resetButton = sidebar.querySelector(this.SETTINGS_SELECTORS.resetButton);
             }
         }
         if (!resetButton && app.element) {
-            const sidebar = app.element.querySelector('aside.sidebar, .sidebar');
+            const sidebar = app.element.querySelector(this.SETTINGS_SELECTORS.sidebar);
             if (sidebar) {
-                resetButton = sidebar.querySelector('button.reset-all');
+                resetButton = sidebar.querySelector(this.SETTINGS_SELECTORS.resetButton);
             }
         }
         
@@ -230,9 +250,9 @@ class CoffeePubMonarch {
                 windowFooter.insertBefore(importExportButtons, windowFooter.firstChild);
             } else {
                 // Try sidebar as fallback
-                let sidebar = html.querySelector('aside.sidebar, .sidebar');
+                let sidebar = html.querySelector(this.SETTINGS_SELECTORS.sidebar);
                 if (!sidebar && app.element) {
-                    sidebar = app.element.querySelector('aside.sidebar, .sidebar');
+                    sidebar = app.element.querySelector(this.SETTINGS_SELECTORS.sidebar);
                 }
                 if (sidebar) {
                     sidebar.appendChild(importExportButtons);
@@ -619,28 +639,34 @@ class CoffeePubMonarch {
                                                                         }
                                                                         
                                                                         const isWorldScoped = existingSetting.scope === 'world';
-                                                                        const isClientScoped = existingSetting.scope === 'client';
-                                                                        
+                                                                        // Foundry v14 adds a third scope, "user": a per-user preference that
+                                                                        // (unlike "client") lives in the Settings database rather than
+                                                                        // localStorage. It is still a personal preference, so it rides the
+                                                                        // client checkbox; and a user owns their own user-scoped settings,
+                                                                        // so it needs no GM gate. Without this it fell through to the
+                                                                        // "unknown scope" branch below and was dropped silently.
+                                                                        const isClientScoped = (existingSetting.scope === 'client') || (existingSetting.scope === 'user');
+
                                                                         // Only GMs can import world-scoped settings
                                                                         if (isWorldScoped && !isGM) {
                                                                             permissionDeniedCount++;
                                                                             continue;
                                                                         }
-                                                                        
+
                                                                         // Check if we should import this setting based on checkboxes
                                                                         if (isWorldScoped && !importWorldSettings) {
                                                                             // World-scoped but checkbox not checked - skip by choice
                                                                             skippedByChoiceCount++;
                                                                             continue;
                                                                         }
-                                                                        
+
                                                                         if (isClientScoped && !importClientSettings) {
                                                                             // Client-scoped but checkbox not checked - skip by choice
                                                                             skippedByChoiceCount++;
                                                                             continue;
                                                                         }
-                                                                        
-                                                                        // If we get here, we should import (either world or client, and checkbox is checked)
+
+                                                                        // If we get here, we should import (either world or client/user, and checkbox is checked)
                                                                         if (!isWorldScoped && !isClientScoped) {
                                                                             // Unknown scope - skip
                                                                             skippedByChoiceCount++;
