@@ -933,72 +933,83 @@ class CoffeePubMonarch {
                 allInstalledSystems.add(game.system.id);
             }
             
-            // Get all stored settings from the database (not just registered ones)
-            // Settings are stored in world.flags and user.flags
-            const allStoredSettings = new Map(); // Map<"namespace.key", {namespace, key, scope}>
+            // Get all stored settings from the real settings stores (not just registered ones).
+            //
+            // These are the two stores `game.settings` itself reads and writes:
+            //   world + user scope -> Setting documents in game.settings.storage.get("world"),
+            //                         a WorldSettings collection. `user` is null for world scope
+            //                         and a user id for the per-user scope Foundry v14 added.
+            //   client scope       -> window.localStorage, keyed by "namespace.key".
+            //
+            // This previously walked game.world.flags / game.user.flags. Package flags are a
+            // different store that settings never live in, so the orphans it listed were flags
+            // rather than settings, and none of them could be removed by the code below.
+            const allStoredSettings = new Map(); // Map<"namespace.key", {namespace, key, scope, settingId}>
             const allSettingsByNamespace = {};
-            
-            // Check world-scoped settings (stored in world.flags)
-            if (game.world?.flags) {
-                for (const [namespace, namespaceFlags] of Object.entries(game.world.flags)) {
-                    if (namespace === 'core') continue; // Skip core, it's always valid
-                    
-                    // Check if this namespace is installed
-                    const isInstalled = allInstalledModules.has(namespace) || 
-                                      allInstalledSystems.has(namespace) || 
-                                      namespace === 'core';
-                    
-                    if (namespaceFlags && typeof namespaceFlags === 'object') {
-                        for (const [key, value] of Object.entries(namespaceFlags)) {
-                            // Skip internal Foundry flags
-                            if (key.startsWith('_')) continue;
-                            
-                            const fullKey = `${namespace}.${key}`;
-                            allStoredSettings.set(fullKey, { namespace, key, scope: 'world' });
-                            
-                            // Collect for report
-                            if (!allSettingsByNamespace[namespace]) {
-                                allSettingsByNamespace[namespace] = [];
-                            }
-                            allSettingsByNamespace[namespace].push(key);
-                        }
-                    }
+
+            // Split on the FIRST dot only: package ids contain no dots, but setting keys may.
+            // (The old `split(".", 2)` silently truncated any key containing a dot.)
+            const splitKey = (fullKey) => {
+                const i = fullKey.indexOf('.');
+                if (i <= 0 || i === fullKey.length - 1) return null;
+                return { namespace: fullKey.slice(0, i), key: fullKey.slice(i + 1) };
+            };
+
+            const recordSetting = (fullKey, scope, settingId = null) => {
+                const parts = splitKey(fullKey);
+                if (!parts) return;
+                const { namespace, key } = parts;
+                if (namespace === 'core') return; // Skip core, it's always valid
+
+                if (!allStoredSettings.has(fullKey)) {
+                    allStoredSettings.set(fullKey, { namespace, key, scope, settingId });
+                }
+
+                // Collect for report
+                if (!allSettingsByNamespace[namespace]) {
+                    allSettingsByNamespace[namespace] = [];
+                }
+                if (!allSettingsByNamespace[namespace].includes(key)) {
+                    allSettingsByNamespace[namespace].push(key);
+                }
+            };
+
+            // World- and user-scoped settings: Setting documents in the world settings collection.
+            const worldStorage = game.settings.storage?.get('world');
+            if (worldStorage) {
+                for (const setting of worldStorage) {
+                    if (!setting?.key) continue;
+                    recordSetting(setting.key, setting.user ? 'user' : 'world', setting.id);
                 }
             }
-            
-            // Check client-scoped settings (stored in user.flags)
-            if (game.user?.flags) {
-                for (const [namespace, namespaceFlags] of Object.entries(game.user.flags)) {
-                    if (namespace === 'core') continue; // Skip core, it's always valid
-                    
-                    // Check if this namespace is installed
-                    const isInstalled = allInstalledModules.has(namespace) || 
-                                      allInstalledSystems.has(namespace) || 
-                                      namespace === 'core';
-                    
-                    if (namespaceFlags && typeof namespaceFlags === 'object') {
-                        for (const [key, value] of Object.entries(namespaceFlags)) {
-                            // Skip internal Foundry flags
-                            if (key.startsWith('_')) continue;
-                            
-                            const fullKey = `${namespace}.${key}`;
-                            // Only add if not already found as world-scoped
-                            if (!allStoredSettings.has(fullKey)) {
-                                allStoredSettings.set(fullKey, { namespace, key, scope: 'client' });
-                            }
-                            
-                            // Collect for report
-                            if (!allSettingsByNamespace[namespace]) {
-                                allSettingsByNamespace[namespace] = [];
-                            }
-                            if (!allSettingsByNamespace[namespace].includes(key)) {
-                                allSettingsByNamespace[namespace].push(key);
-                            }
-                        }
+
+            // Client-scoped settings: localStorage, keyed exactly as "namespace.key".
+            //
+            // localStorage is shared with anything else running on this origin, and the orphan
+            // test below (namespace is not an installed package) would happily flag an unrelated
+            // dotted key for deletion. So a client entry must also LOOK like a Foundry setting:
+            // a package-id-shaped namespace, and a JSON value — core always writes client
+            // settings as JSON via ClientSettings##setClient. Anything else is left alone.
+            const PACKAGE_ID = /^[A-Za-z0-9_-]+$/;
+            const clientStorage = game.settings.storage?.get('client');
+            if (clientStorage && typeof clientStorage.key === 'function') {
+                for (let i = 0; i < clientStorage.length; i++) {
+                    const fullKey = clientStorage.key(i);
+                    if (!fullKey) continue;
+
+                    const parts = splitKey(fullKey);
+                    if (!parts || !PACKAGE_ID.test(parts.namespace)) continue;
+
+                    try {
+                        JSON.parse(clientStorage.getItem(fullKey));
+                    } catch (err) {
+                        continue; // Not a Foundry client setting — not ours to touch.
                     }
+
+                    recordSetting(fullKey, 'client');
                 }
             }
-            
+
             // Also include registered settings for the report (they might not be in flags yet)
             if (game.settings?.settings) {
                 for (const fullKey of game.settings.settings.keys()) {
@@ -1118,7 +1129,9 @@ class CoffeePubMonarch {
                                     // Find the scope from our stored settings
                                     const storedSetting = allStoredSettings.get(fullKey);
                                     if (storedSetting) {
-                                        checkedSettings.push({ namespace, key, scope: storedSetting.scope });
+                                        // Carry the Setting document id through so the delete below
+                                        // targets the exact document we discovered.
+                                        checkedSettings.push({ namespace, key, scope: storedSetting.scope, settingId: storedSetting.settingId });
                                     } else {
                                         // Fallback: try to determine scope from registered settings
                                         const registeredSetting = game.settings.settings.get(fullKey);
@@ -1142,61 +1155,67 @@ class CoffeePubMonarch {
                                 const stillInstalledModules = new Set();
                                 
                                 // Prune selected settings by removing them from the database storage
-                                for (const { namespace, key, scope } of checkedSettings) {
+                                for (const { namespace, key, scope, settingId } of checkedSettings) {
                                     try {
                                         // Check permissions (world-scoped requires GM)
                                         if (scope === 'world' && !game.user.isGM) {
                                             continue; // Skip world-scoped settings if not GM
                                         }
-                                        
+
                                         const fullKey = `${namespace}.${key}`;
                                         console.log(`COFFEE PUB • MONARCH | Attempting to prune ${fullKey} (scope: ${scope})`);
-                                        
+
                                         let removed = false;
-                                        
-                                        // Remove from settings storage (the actual database)
-                                        if (scope === 'world' || !scope) {
+
+                                        // World- and user-scoped settings are Setting DOCUMENTS. Delete them
+                                        // through the document API — the WorldSettings collection is not a
+                                        // localStorage-shaped store and has no removeItem/setItem, despite
+                                        // core describing game.settings.storage that way.
+                                        if (scope === 'world' || scope === 'user' || !scope) {
                                             try {
-                                                const worldStorage = game.settings.storage?.get("world");
-                                                if (worldStorage && typeof worldStorage.removeItem === 'function') {
-                                                    await worldStorage.removeItem(fullKey);
-                                                    // Verify it was actually removed
-                                                    const stillExists = await worldStorage.getItem(fullKey);
-                                                    if (stillExists !== null) {
-                                                        console.warn(`COFFEE PUB • MONARCH | Warning: ${fullKey} still exists in world storage after removal`);
+                                                const worldStorage = game.settings.storage?.get('world');
+                                                const doc = settingId
+                                                    ? worldStorage?.get(settingId)
+                                                    : worldStorage?.getSetting?.(fullKey, scope === 'user' ? game.userId : null);
+
+                                                if (doc) {
+                                                    await doc.delete();
+                                                    // Verify against the collection rather than trusting the call.
+                                                    if (worldStorage?.get(doc.id)) {
+                                                        console.warn(`COFFEE PUB • MONARCH | Warning: ${fullKey} still present after delete`);
                                                     } else {
-                                                        console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from world storage (verified)`);
+                                                        console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from world settings (verified)`);
                                                         removed = true;
                                                     }
                                                 } else {
-                                                    console.warn(`COFFEE PUB • MONARCH | World storage not available or removeItem not a function for ${fullKey}`);
+                                                    console.warn(`COFFEE PUB • MONARCH | No Setting document found for ${fullKey}`);
                                                 }
                                             } catch (error) {
                                                 console.warn(`COFFEE PUB • MONARCH | Could not remove world setting ${fullKey}:`, error);
                                             }
                                         }
-                                        
+
+                                        // Client-scoped settings really are localStorage entries.
                                         if (scope === 'client' || (!removed && !scope)) {
                                             try {
-                                                const clientStorage = game.settings.storage?.get("client");
+                                                const clientStorage = game.settings.storage?.get('client');
                                                 if (clientStorage && typeof clientStorage.removeItem === 'function') {
-                                                    await clientStorage.removeItem(fullKey);
+                                                    clientStorage.removeItem(fullKey);
                                                     // Verify it was actually removed
-                                                    const stillExists = await clientStorage.getItem(fullKey);
-                                                    if (stillExists !== null) {
+                                                    if (clientStorage.getItem(fullKey) !== null) {
                                                         console.warn(`COFFEE PUB • MONARCH | Warning: ${fullKey} still exists in client storage after removal`);
                                                     } else {
                                                         console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from client storage (verified)`);
                                                         removed = true;
                                                     }
                                                 } else {
-                                                    console.warn(`COFFEE PUB • MONARCH | Client storage not available or removeItem not a function for ${fullKey}`);
+                                                    console.warn(`COFFEE PUB • MONARCH | Client storage not available for ${fullKey}`);
                                                 }
                                             } catch (error) {
                                                 console.warn(`COFFEE PUB • MONARCH | Could not remove client setting ${fullKey}:`, error);
                                             }
                                         }
-                                        
+
                                         // Check if module is still installed (which would cause setting to reappear)
                                         const moduleStillInstalled = game.modules.has(namespace);
                                         if (moduleStillInstalled) {
@@ -1204,53 +1223,11 @@ class CoffeePubMonarch {
                                             console.warn(`COFFEE PUB • MONARCH | Warning: Module "${namespace}" is still installed. Setting will reappear after refresh because the module re-registers it on load.`);
                                         }
                                         
-                                        // Also remove from flags if they exist (some settings might be stored as flags)
-                                        if (scope === 'world' && game.world?.flags?.[namespace]?.[key] !== undefined) {
-                                            try {
-                                                // Try unsetFlag if namespace is active
-                                                try {
-                                                    await game.world.unsetFlag(namespace, key);
-                                                    console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from world flags via unsetFlag`);
-                                                } catch (flagError) {
-                                                    // If unsetFlag fails, directly manipulate flags
-                                                    const sourceFlags = foundry.utils.deepClone(game.world._source?.flags || game.world.flags || {});
-                                                    if (sourceFlags[namespace] && sourceFlags[namespace][key] !== undefined) {
-                                                        delete sourceFlags[namespace][key];
-                                                        if (Object.keys(sourceFlags[namespace]).length === 0) {
-                                                            delete sourceFlags[namespace];
-                                                        }
-                                                        await game.world.updateSource({ flags: sourceFlags });
-                                                        console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from world flags via updateSource`);
-                                                    }
-                                                }
-                                            } catch (error) {
-                                                console.warn(`COFFEE PUB • MONARCH | Could not remove world flag ${fullKey}:`, error);
-                                            }
-                                        }
-                                        
-                                        if (scope === 'client' && game.user?.flags?.[namespace]?.[key] !== undefined) {
-                                            try {
-                                                // Try unsetFlag if namespace is active
-                                                try {
-                                                    await game.user.unsetFlag(namespace, key);
-                                                    console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from user flags via unsetFlag`);
-                                                } catch (flagError) {
-                                                    // If unsetFlag fails, directly manipulate flags
-                                                    const sourceFlags = foundry.utils.deepClone(game.user._source?.flags || game.user.flags || {});
-                                                    if (sourceFlags[namespace] && sourceFlags[namespace][key] !== undefined) {
-                                                        delete sourceFlags[namespace][key];
-                                                        if (Object.keys(sourceFlags[namespace]).length === 0) {
-                                                            delete sourceFlags[namespace];
-                                                        }
-                                                        await game.user.updateSource({ flags: sourceFlags });
-                                                        console.log(`COFFEE PUB • MONARCH | Removed ${fullKey} from user flags via updateSource`);
-                                                    }
-                                                }
-                                            } catch (error) {
-                                                console.warn(`COFFEE PUB • MONARCH | Could not remove user flag ${fullKey}:`, error);
-                                            }
-                                        }
-                                        
+                                        // NOTE: no package-flag fallback here. Settings are never stored in
+                                        // game.world.flags / game.user.flags, so the old unsetFlag and
+                                        // updateSource fallbacks were operating on an unrelated store — and
+                                        // updateSource only mutates the in-memory copy, so it never persisted.
+
                                         // Only count as successfully pruned if:
                                         // 1. The setting was removed from storage, AND
                                         // 2. The module is NOT still installed (otherwise it will reappear)
