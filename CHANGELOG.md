@@ -5,6 +5,95 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [14.0.0] - Foundry v14 readiness
+
+### Fixed
+
+- **The module dependency refresh never ran** (`scripts/monarch.js`): after core resolved module
+  dependencies, Monarch's set highlighting and button visibility did not update. The handler was
+  registered on `renderDialog` and matched `dialog.data.title` against the literal string "Manage
+  Module Dependencies". Core's prompt is `foundry.applications.settings.DependencyResolution`, an
+  ApplicationV2, so it fires `renderDependencyResolution` and `closeDependencyResolution` and never
+  `renderDialog`. Three failures were stacked: the wrong hook name, `.data` which ApplicationV2 does
+  not have, and `button.yes` which no v14 template emits. The registration succeeded and was silently
+  dead. Now refreshes on `closeDependencyResolution`, deferred, because
+  `ModuleManagement#_onSelectDependencies` sets the checkbox properties directly without dispatching a
+  `change` event. A guarded `renderDialog` fallback remains for Foundry 13 and can be deleted when the
+  manifest minimum reaches 14.
+
+- **Settings window buttons anchored to selectors v14 renamed** (`scripts/monarch.js`):
+  `button.reset-all` became `button.reset-defaults`, and the settings sidebar lost its `sidebar` class
+  and is now identified by its ApplicationV2 part name. Both old names survive in v14's `foundry2.css`
+  as dead rules, so grepping a Foundry install for them returns a hit that no template renders. Both
+  selectors now live in a `SETTINGS_SELECTORS` constant carrying the v14 form first and the v13 form
+  after, so one codebase serves both.
+
+- **Settings import silently dropped user-scoped settings** (`scripts/monarch.js`): Foundry v14 adds a
+  third scope, `user`, alongside `client` and `world`. Import treated scope as a world/client binary,
+  so user-scoped entries fell through to an "unknown scope" branch and were skipped without being
+  reported. They now ride the personal-settings checkbox and take no GM gate, since a user owns their
+  own user-scoped settings. This was not theoretical: the author's world carries 130 registered
+  user-scoped settings and 667 user-scoped Setting documents.
+
+- **Prune never deleted anything, and was reading the wrong store entirely** (`scripts/monarch.js`):
+  discovery walked `game.world.flags` and `game.user.flags`. Settings do not live in package flags,
+  so the orphans it listed were flags rather than settings. Removal then called `removeItem` on
+  `game.settings.storage.get("world")`, which is a `WorldSettings` collection implementing only
+  `getSetting` and `getItem` -- **there is no `removeItem` or `setItem`**, despite `ClientSettings`
+  documenting its storage interfaces as localStorage-shaped. The call sat behind a
+  `typeof === 'function'` guard, so it logged a warning and reported success having deleted nothing.
+  Discovery now reads `Setting` documents from the world collection; deletion goes through
+  `doc.delete()`. Also fixed: keys containing a dot were truncated by `split(".", 2)`.
+
+### Changed
+
+- **Prune no longer offers client-scoped settings, and refuses them if asked** (`scripts/monarch.js`):
+  this is a constraint, not an omission, and it is recorded because it looks like an easy gap to close.
+  The world store is self-identifying -- every row in it is a `Setting` document -- while localStorage
+  is shared with everything else on the origin and has nothing distinguishing an abandoned setting from
+  data something still needs. The orphan test is an exclusion test, and run over a shared store it
+  identifies everything unaccounted for rather than everything that is a setting. Measured on a live
+  world of 664 localStorage keys, a filter requiring a package-id-shaped prefix and a JSON-parseable
+  value still put 181 keys in the delete list, including `forge-vtt.apiKey` (a live credential) and
+  `recycle-bin.<world>.bin` (recoverable deleted documents); the JSON gate rejected zero of the 664.
+  The failure is that the text before the first dot is not a namespace. Inverting the test to require a
+  positive registry match is sound and returns nothing, since an orphan is by definition unregistered.
+  The delete loop now refuses `scope === 'client'` as a backstop and reports the refusals.
+
+- **Documentation restructured to the suite standard**: `documentation/` now carries `home.md`,
+  `known-issues.md`, `TODO.md`, an architecture document, and seven user guides, and publishes to the
+  wiki. The four v13 migration documents were deleted rather than archived, their durable content
+  folded into `architecture-monarch.md` first. `phase1-audit.md` in particular documented the
+  `renderDialog` hook replaced above, so it described code that no longer exists.
+
+- **README rewritten as a product page**, and the Foundry badges corrected. They read v13 and v14; the
+  previous pair claimed v12 and v13 and was two generations stale.
+
+### Verified
+
+Verified live on **Foundry 14.367** with dnd5e 5.3.3. The dependency hook was confirmed by
+instrumenting `Hooks.callAll` and constructing `DependencyResolution` against a rendered
+`ModuleManagement`: `renderDependencyResolution` and `closeDependencyResolution` both fired,
+`renderDialog` and `closeDialog` stayed silent. Settings button placement was confirmed visually. The
+prune rewrite was confirmed by a real prune followed by a cache-bypassing reload: total Setting
+documents fell 3799 to 3623 and orphans fell 792 to 616, the same 176 in both, so every deletion was an
+orphan and nothing else was touched. Eleven namespaces disappeared entirely, including the retired
+`coffee-pub-illuminator` (93 rows) and `coffee-pub-bubo` (5).
+
+Not verified: the settings import path for user-scoped settings, which is fixed and exercised by the
+same registry but has not been round-tripped through an export and import on v14.
+
+The manifest declares `verified: "14"`, and the README's Foundry badges match it: v13 yellow for
+supported, v14 green for verified.
+
+### Notes
+
+No Foundry global that Monarch uses is removed in v14. `Dialog`, `Application` and `FormApplication`
+are deprecated until v16; `renderTemplate` and `saveDataToFile` are shimmed until v15. What v14 does
+remove is the `foundry.utils` family of bare globals and `AudioHelper`, and Monarch uses none of them.
+The eleven remaining ApplicationV1 `Dialog` sites are therefore deprecation debt with a v16 deadline
+rather than v14 blockers, and were left alone.
+
 
 ## [13.0.5]
 - **CSS**: potential v14 compatibility update.

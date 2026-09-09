@@ -357,12 +357,13 @@ class CoffeePubMonarch {
                     <div class="form-group">
                         <label class="checkbox">
                             <input type="checkbox" name="importClientSettings" id="importClientSettings" ${!isGM ? 'checked' : ''}>
-                            Import client-scoped settings (per-user preferences)
+                            Import personal settings (client- and user-scoped preferences)
                         </label>
                         <p class="notes" style="margin-top: 0.5em; font-size: 0.9em;">
-                            <strong>Warning:</strong> Client-scoped settings are personal preferences (UI themes, display settings, etc.). 
-                            Only enable this if you want to copy personal preferences from the export. 
-                            In multi-user environments, this will only affect your own client settings.
+                            <strong>Warning:</strong> These are personal preferences (UI themes, display settings, etc.) rather than shared world configuration.
+                            Only enable this if you want to copy personal preferences from the export.
+                            In multi-user environments, this will only affect your own preferences.
+                            Covers both client-scoped settings (stored in this browser) and, on Foundry v14 and later, user-scoped settings (stored in the world against your user).
                         </p>
                     </div>
                     <p class="notes">You will be able to preview the changes before the final import. Make sure to backup your settings first!</p>
@@ -523,12 +524,12 @@ class CoffeePubMonarch {
                                     
                                     const previewContent = `
                                         <h3>Import Preview</h3>
-                                        ${!isGM ? '<p class="notes" style="color: #ff6b6b; margin-bottom: 1em;"><strong>Note:</strong> As a player, you can only import client-scoped settings. World-scoped settings require GM permissions.</p>' : ''}
+                                        ${!isGM ? '<p class="notes" style="color: #ff6b6b; margin-bottom: 1em;"><strong>Note:</strong> As a player, you can only import personal (client- and user-scoped) settings. World-scoped settings require GM permissions.</p>' : ''}
                                         <div class="form-group">
                                             <p><strong>Import Options:</strong></p>
                                             <ul style="margin: 0.5em 0; padding-left: 1.5em;">
                                                 ${importWorldSettings ? '<li>World-scoped settings: <strong>Enabled</strong></li>' : '<li>World-scoped settings: <strong>Disabled</strong></li>'}
-                                                ${importClientSettings ? '<li>Client-scoped settings: <strong>Enabled</strong></li>' : '<li>Client-scoped settings: <strong>Disabled</strong></li>'}
+                                                ${importClientSettings ? '<li>Personal (client/user-scoped) settings: <strong>Enabled</strong></li>' : '<li>Personal (client/user-scoped) settings: <strong>Disabled</strong></li>'}
                                             </ul>
                                         </div>
                                         <div class="form-group">
@@ -719,7 +720,7 @@ class CoffeePubMonarch {
                                                             scopeDetails += `<p><strong>World-scoped:</strong> ${worldScopedCount} settings</p>`;
                                                         }
                                                         if (importClientSettings && clientScopedCount > 0) {
-                                                            scopeDetails += `<p><strong>Client-scoped:</strong> ${clientScopedCount} settings</p>`;
+                                                            scopeDetails += `<p><strong>Personal (client/user-scoped):</strong> ${clientScopedCount} settings</p>`;
                                                         }
                                                         if (permissionDeniedCount > 0) {
                                                             scopeDetails += `<p class="notes" style="color: #ff6b6b;"><strong>Permission denied:</strong> ${permissionDeniedCount} world-scoped settings (GM only)</p>`;
@@ -732,7 +733,7 @@ class CoffeePubMonarch {
                                                                 reasons.push('world-scoped settings (checkbox not checked)');
                                                             }
                                                             if (!importClientSettings) {
-                                                                reasons.push('client-scoped settings (checkbox not checked)');
+                                                                reasons.push('personal client/user-scoped settings (checkbox not checked)');
                                                             }
                                                             reasons.push('settings not found in current instance');
                                                             skippedDetails = `<p><strong>Skipped (by choice):</strong> ${skippedByChoiceCount} settings</p>
@@ -756,7 +757,7 @@ class CoffeePubMonarch {
                                                             ${skippedDetails}
                                                             ${errorDetails}
                                                             <p><strong>Modules processed:</strong> ${availableModules.length}</p>
-                                                            ${!isGM ? '<p class="notes">Note: As a player, you can only import client-scoped settings. World-scoped settings require GM permissions.</p>' : ''}
+                                                            ${!isGM ? '<p class="notes">Note: As a player, you can only import personal (client- and user-scoped) settings. World-scoped settings require GM permissions.</p>' : ''}
                                                             <p class="notes">Note: Some settings may require a page reload to take effect.</p>`;
 
                                                         const successDialog = new Dialog({

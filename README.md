@@ -1,76 +1,96 @@
 # Coffee Pub Monarch
 
-![Foundry v12](https://img.shields.io/badge/foundry-v12-yellow)
-![Foundry v13](https://img.shields.io/badge/foundry-v13-green)
 ![Latest Release](https://img.shields.io/github/v/release/Drowbe/coffee-pub-monarch)
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/Drowbe/coffee-pub-monarch/release.yml)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/Drowbe/coffee-pub-monarch/release.yml?event=push)
 ![GitHub all releases](https://img.shields.io/github/downloads/Drowbe/coffee-pub-monarch/total)
+![Foundry v13](https://img.shields.io/badge/foundry-v13-yellow)
+![Foundry v14](https://img.shields.io/badge/foundry-v14-green)
 ![MIT License](https://img.shields.io/badge/license-MIT-blue)
 
-A Foundry VTT module for saving and loading different module configurations and managing game settings. Switch between game systems or play styles with one click, export or import full settings backups with fine-grained control, and quickly jump to any setting by name—all without leaving the Module Management or Configure Settings windows.
+## What it is
 
-> **Note:** Version 12.1.3 is the final release for Foundry v12. All subsequent releases target v13+.
+Monarch lets you save the set of modules you have enabled, give it a name, and switch to a different
+one with a click. It also backs up every setting in your world to a file, puts them back, and clears
+out the settings left behind by modules you uninstalled months ago.
 
-## Features
+If you run more than one game, or you keep a stripped back set of modules for testing, this is the
+module that stops you ticking forty checkboxes by hand.
 
-- **Module sets**
-  - Save your current module configuration as a named set and load it with one click
-  - Visual feedback: green/red for modules that will be enabled/disabled when loading a set; yellow when editing a set
-  - Tracks the active set and keeps a "Default Configuration" from your initial setup
-  - Export and import module sets for backup or sharing
+![Module set controls, showing which modules will be enabled and disabled](documentation/assets/monarch-modules-sets-change.webp)
 
-- **Settings window**
-  - **Export / Import:** Backup or restore all game and module settings. Choose world- and/or client-scoped settings and select which modules to include
-  - **Jump to setting:** Search at the top of the categories list scrolls to a matching setting; prev/next cycle through matches. Nothing is hidden—only scroll position changes
-  - **Prune:** Remove orphaned settings (from uninstalled modules) or selected settings from storage
+Monarch is built for a real weekly game and released for yours. It is offered as-is, with no guarantee
+of stability, compatibility, or support. **Use at your own risk.** Bugs and requests go in
+[Issues](https://github.com/Drowbe/coffee-pub-monarch/issues), and they get read.
 
-## Screenshots
+## What it does
 
-### Module Management — Sets and change highlighting
-![Module set controls and change highlighting](product/monarch-modules-sets-change.webp)
+- **Save your enabled modules as a named set** and load it back with one click, with colour coding
+  that shows exactly what will turn on and off before you commit.
+- **Export and import module sets** as files, to move a working configuration to another world or
+  another machine.
+- **Back up every setting in your world** to a JSON file, and restore it with a preview that lets you
+  pick which modules to bring back.
+- **Separate world settings from personal ones** on import, so you can copy a world's configuration
+  without dragging someone else's interface preferences along with it.
+- **Jump to any setting by name** with a search that scrolls to it instead of hiding everything else.
+- **Clear out orphaned settings** from modules you have uninstalled, which Foundry otherwise keeps
+  forever.
 
-### Settings window — Jump to setting
-Type to jump to a setting by name; use prev/next to cycle through matches.
-![Jump to setting](product/monarch-settings-jumpto.webp)
+## Requirements
 
-### Settings window — Import (select file and scope)
-![Import Settings — select file and scope](product/monarch-settings-import-select.webp)
+- **Foundry VTT version 13 or 14.**
+- **No other modules.** Monarch has no dependencies, including on other Coffee Pub modules.
+- **No system requirement.** Monarch does not touch game rules, so it works with any system.
 
-### Settings window — Import preview
-![Import Settings — preview](product/monarch-settings-import-preview.webp)
+You need to be a GM to use the module set features. Players see the settings buttons but can only
+change their own preferences.
 
-### Settings window — Import result
-![Import Settings — result](product/monarch-settings-import-result.webp)
+## Install
 
-### Settings window — Prune settings
-![Prune Settings](product/monarch-settings-prune.webp)
-
-## Installation
-
-You can install this module using the following manifest URL in Foundry VTT:
+In Foundry, go to **Add-on Modules**, **Install Module**, and paste this manifest URL:
 
 ```
 https://github.com/Drowbe/coffee-pub-monarch/releases/latest/download/module.json
 ```
 
-## Usage
+## Where to read more
 
-### Module Management
-1. Open the **Module Management** window in Foundry VTT.
-2. Use the controls above the module list:
-   - Dropdown to select a saved module set, then **Load Set** to apply it
-   - **Save as New** to save the current configuration; **Update** to overwrite the current set; **Delete** to remove a set
-   - **Export Sets** and **Import Sets** for backup or sharing
-3. **Visual feedback:** When selecting a set, modules that will change are highlighted (green = enabled, red = disabled). When editing a set, changes are highlighted in yellow.
+Everything is on [the wiki](https://github.com/Drowbe/coffee-pub-monarch/wiki).
 
-### Settings window
-- **Configure Settings:** Import/Export/Prune buttons appear in the sidebar. **Export Settings** saves all settings to a JSON file; **Import Settings** restores with scope and per-module options; **Prune Settings** removes orphaned or selected settings.
-- **Jump to setting:** At the top of the categories list, type in the search to scroll to a matching setting; use the up/down buttons to move between matches. The list is not filtered—everything stays visible.
+- [Getting Started](https://github.com/Drowbe/coffee-pub-monarch/wiki/userguide-getting-started) --
+  installing, and what to do in the first five minutes.
+- [Module Sets](https://github.com/Drowbe/coffee-pub-monarch/wiki/userguide-module-sets) -- saving and
+  switching configurations.
+- [Backing Up and Restoring Settings](https://github.com/Drowbe/coffee-pub-monarch/wiki/userguide-settings-backup)
+- [Pruning Orphaned Settings](https://github.com/Drowbe/coffee-pub-monarch/wiki/userguide-prune-settings)
+  -- read this before using that button.
+- [Architecture](https://github.com/Drowbe/coffee-pub-monarch/wiki/architecture-monarch) -- for anyone
+  changing the module.
 
-## License
+<!-- global:ai-assistance -->
+## AI Assistance and the Illusion of Good Code
 
-This module is licensed under the [MIT License](LICENSE).
+I started writing Foundry modules for use at my own table back in 2020. There were already a ton of amazing modules out there, but they either didn't quite do what I wanted or didn't deliver the kind of user experience I was looking for.
 
-## Contributing
+I've been a design leader for more than 20 years, but I spent the first half of my career as a developer, so building my own modules seemed like a fun way to kill some time. I'm a pretty good designer. I'm a decent developer. But, over time, my hand-written code and hacks got a little messy (and memory-leaky, and a little buggy. Feels good to say it out loud.).
 
-Feel free to submit issues and enhancement requests!
+Today, the Coffee Pub suite of modules is developed with AI assistance, primarily Claude and Cursor, for documentation, refactoring, debugging, and other development work. Every change is reviewed and committed by me, and nothing reaches a release that I haven't crawled and run at my own table. I can't seem to give up my IDE. The UX design, architecture, and ideas still come from my own fever dreams and chronic lack of sleep.
+
+Testing and verifying a change means running it in Foundry so I can watch the console, break things, fix them, and hone the experience. The repositories carry a set of tools for testing the things that are difficult to catch through review and manual testing alone. They help ensure styles don't conflict, shared coding and documentation standards stay consistent, and the suite of modules continues to work well as a system without silently breaking.
+
+Those checks are there because AI-assisted development can move very quickly, and without oversight, engagement, and planning, it can also go confidently off the rails and deliver the illusion of good code. The AI helps me build faster. It doesn't decide what gets built, its architecture, or how it should work. You can blame this human for that.
+
+If the idea of AI-assisted development keeps you up at night or just isn't your jam, no worries at all. I get it. You do you.
+<!-- /global:ai-assistance -->
+
+## The suite
+
+Monarch is one of the Coffee Pub modules. The others are documented from
+[the Blacksmith wiki](https://github.com/Drowbe/coffee-pub-blacksmith/wiki). Monarch is the one that
+stands alone: it needs none of them, and none of them need it.
+
+## Licence
+
+[MIT](LICENSE). Issues and enhancement requests are welcome.
+</content>
+</invoke>
