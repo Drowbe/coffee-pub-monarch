@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [14.0.1] - Foundry v15 readiness
+
+### Changed
+
+- **Deprecated AppV1 dialogs migrated to `DialogV2`** (`scripts/monarch.js`, `scripts/replace-name.js`):
+  every `new Dialog(...)` and `Dialog.confirm(...)` is now `foundry.applications.api.DialogV2`, ahead of
+  removal in Foundry v15. Button flow is unchanged, including the nested import, preview, success and
+  reload dialogs. Callbacks read the form from `button.form` instead of unwrapping jQuery or DOM
+  arguments, and the Prune and Import Preview dialogs attach their Select All / Select None handlers
+  through `DialogV2.wait()`, the only entry point that honors the `render` option.
+- **`saveDataToFile` is now `foundry.utils.saveDataToFile`** (`scripts/monarch.js`): the bare global is
+  deprecated. Covers settings export, module set export and the import analysis download.
+- **Global Text Replacer is now an ApplicationV2** (`scripts/search-and-replace.js`): moved from
+  `Application` to `HandlebarsApplicationMixin(ApplicationV2)`. Its markup and styles live in the new
+  `templates/text-replacer.hbs`, and folder names in its dropdown are now HTML-escaped.
+- **Dialog layout polish**: the Settings Report & Prune and Import Preview windows now open at a fixed
+  width and are resizable, the module list text is forced dark so it stays readable on its light
+  background in dark themes, and the module set name field now has its label above it ("Module Set
+  Name").
+
+### Fixed
+
+- **Required file and name inputs could block Cancel**: `DialogV2` submits its form for every button, so
+  a `required` empty field would have refused a Cancel click. The `required` attributes are gone; the
+  callbacks already return early when the file or name is missing.
+
 ## [14.0.0] - Foundry v14 readiness
 
 ### Fixed
