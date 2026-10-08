@@ -12,24 +12,65 @@ import { MODULE  } from './const.js';
 // ================================================================== 
 
 
-new (class TextReplacerApp extends Application {
-  static get defaultOptions() {
-    return foundry.utils.mergeObject(super.defaultOptions, {
-      id: "text-replacer",
+new (class TextReplacerApp extends foundry.applications.api.HandlebarsApplicationMixin(foundry.applications.api.ApplicationV2) {
+  static DEFAULT_OPTIONS = {
+    id: "text-replacer",
+    classes: ["text-replacer"],
+    tag: "div",
+    window: {
       title: "Global Text Replacer",
-      template: null,
-      popOut: true,
-      resizable: true,
+      resizable: true
+    },
+    position: {
       width: 900,
-      height: "auto",
-      classes: ["text-replacer"]
-    });
+      height: "auto"
+    }
+  };
+
+  static PARTS = {
+    main: {
+      template: "modules/coffee-pub-monarch/templates/text-replacer.hbs"
+    }
+  };
+
+  async _prepareContext(options) {
+    const context = await super._prepareContext(options);
+    // Helper to get the document type for a folder
+    function getFolderType(folder) {
+      // Try folder.type if it's not 'Folder'
+      if (folder.type && folder.type !== 'Folder') return folder.type;
+      // Fallback: look at the first document in contents
+      if (folder.contents && folder.contents.length > 0) {
+        const doc = folder.contents[0];
+        // Try doc.documentName, then doc.constructor.documentName
+        return doc.documentName || (doc.constructor && doc.constructor.documentName) || "Unknown";
+      }
+      return "Unknown";
+    }
+    // Helper to map to user-friendly, capitalized type
+    function getFolderTypeDisplay(type) {
+      const map = {
+        Actor: "Actor",
+        Item: "Item",
+        JournalEntry: "Journal",
+        Scene: "Scene",
+        RollTable: "Roll Table",
+        Playlist: "Playlist"
+      };
+      return map[type] || type.charAt(0).toUpperCase() + type.slice(1);
+    }
+    context.folders = this._getMatchingFolders().map(f => ({
+      id: f.id,
+      label: `${f.name} (${getFolderTypeDisplay(getFolderType(f))})`
+    }));
+    return context;
   }
 
-  getData() { return {}; }
+  _onRender(context, options) {
+    this._activateListeners(this.element);
+  }
 
-  activateListeners(html) {
-    super.activateListeners(html);
+  _activateListeners(html) {
     const clearBtn = html.querySelector("button[name='clearFields']");
     if (clearBtn) {
       clearBtn.addEventListener("click", () => {
@@ -482,263 +523,7 @@ new (class TextReplacerApp extends Application {
       return;
     }
   }
-
-  async _renderInner(data) {
-    const folders = this._getMatchingFolders();
-    // Helper to get the document type for a folder
-    function getFolderType(folder) {
-      // Try folder.type if it's not 'Folder'
-      if (folder.type && folder.type !== 'Folder') return folder.type;
-      // Fallback: look at the first document in contents
-      if (folder.contents && folder.contents.length > 0) {
-        const doc = folder.contents[0];
-        // Try doc.documentName, then doc.constructor.documentName
-        return doc.documentName || (doc.constructor && doc.constructor.documentName) || "Unknown";
-      }
-      return "Unknown";
-    }
-    // Helper to map to user-friendly, capitalized type
-    function getFolderTypeDisplay(type) {
-      const map = {
-        Actor: "Actor",
-        Item: "Item",
-        JournalEntry: "Journal",
-        Scene: "Scene",
-        RollTable: "Roll Table",
-        Playlist: "Playlist"
-      };
-      return map[type] || type.charAt(0).toUpperCase() + type.slice(1);
-    }
-    const container = document.createElement('div');
-    container.insertAdjacentHTML('beforeend', `<style>
-.text-replacer-flex {
-  display: flex;
-  gap: 1em;
-  min-width: 800px;
-  align-items: flex-start;
-  overflow: hidden;
-}
-.text-replacer-left {
-  flex: 1;
-  max-width: 400px;
-  min-width: 400px;
-}
-.text-replacer-right {
-  flex: 1;
-  border: 1px solid #999;
-  padding: 1.0em;
-  overflow-y: auto;
-  background: #f9f9f9;
-  min-width: 400px;
-  max-height: 1000px;
-  height: 100%;
-  border-radius: 4px;
-}
-.text-replacer-right p {
-  font-size: 1.2em;
-  margin-top: 0.0em;
-  margin-bottom: 1.0em;
-  text-transform: uppercase;
-}
-.two-column {
-  columns: 2;
-  -webkit-columns: 2;
-  column-gap: 1em;
-}
-.form-group {
-  margin-bottom: 1em;
-  display: block;
-}
-.button-clear,
-.button-replace,
-.button-report,
-.button-search {
-  border: none;
-  padding-top: 0px;
-padding-bottom: 0px;
-padding-left: 0px;
-padding-right: 0px;
-  border-radius: 5px;
-}
-.button-report,
-.button-search {
-  background-color: rgb(34, 86, 39);
-  color: #ffffff;
-}
-.button-replace {
-  background-color: rgb(87, 44, 53);
-  color: #ffffff;
-}
-.button-clear {
-  background-color: rgb(42, 51, 56);
-  color: #ffffff;
-}
-.form-group label {
-  display: block;
-  margin-bottom: 0.25em;
-}
-.text-replacer-left form {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 0.5em;
-}
-.replace-result {
-  border-bottom: 1px dotted #000000;
-  margin-top: 5px;
-  margin-bottom: 15px;
-  padding-bottom: 15px;
-}
-.replace-new,
-.replace-old {
-  font-size: 1.0em;
-  margin-top: 5px;
-  margin-bottom: 5px;
-  font-size: 1.1em;
-}
-.replace-result-title {
-  border: 0px dotted #000000;
-  border-radius: 3px;
-  background-color: rgb(228, 222, 216);
-  padding-top: 4px;
-  padding-bottom: 4px;
-  padding-left: 5px;
-  padding-right: 5px;
-  display: flex;
-  align-items: center;
-}
-.replace-title {
-  border: 0px dotted #000000;
-  display: inline-block;
-  font-size: 1.2em;
-  font-weight: 900;
-  padding-top: 0px;
-  padding-bottom: 0px;
-  padding-left: 0px;
-  padding-right: 0px;
-  cursor: pointer;
-  margin-top: 0px;
-  margin-bottom: 0px;
-  margin-left: 0px;
-  margin-right: 8px;
-  text-transform: uppercase;
-}
-.replace-title:hover {
-  color: #12409f;
-}
-.replace-result-tag {
-  display: inline-block;
-  color: rgb(255, 255, 255);
-  background-color: rgb(159, 63, 18);
-  padding-top: 3px;
-  padding-bottom: 2px;
-  padding-left: 5px;
-  padding-right: 5px;
-  border-radius: 3px;
-  font-size: 0.8em;
-  text-transform: uppercase;
-  margin-right: 5px;
-}
-.replace-field-tag {
-  display: inline-block;
-  color: #fff;
-  background-color: #3a6ea5;
-  padding: 3px 5px 2px 5px;
-  border-radius: 3px;
-  font-size: 0.8em;
-  text-transform: uppercase;
-  margin-right: 0px;
-}
-.code-old-label,
-.code-new-label {
-  padding-top: 1px;
-  padding-bottom: 1px;
-  padding-left: 5px;
-  padding-right: 5px;
-  margin-right: 5px;
-  font-weight: 900;
-  display: inline-block;
-  width: 40px;
-  text-align: right;
-  background-color: #dedbd2;
-  border-radius: 3px;
-}
-.code-new-label {
-  color: #060;
-}
-.code-old-label {
-  color: #600;
-}
-.code-new {
-  color: #060;
-}
-.code-old {
-  color: #600;
-}
-
-</style>
-      <div class="text-replacer-flex">
-        <div class="text-replacer-left">
-          <form>
-            <label for="oldPath">Current Text</label>
-            <div class="form-group">
-              <input type="text" name="oldPath" id="oldPath" placeholder="e.g. modules/assets" style="width:100%;" />
-            </div>
-            <label for="newPath">New Text</label>
-            <div class="form-group">
-              <input type="text" name="newPath" id="newPath" placeholder="e.g. newplace/newfolder" style="width:100%;" />
-            </div>
-            <label for="folderFilter">Folder Filter</label>
-            <div class="form-group">
-              <select name="folderFilter" id="folderFilter" style="width:100%;">
-                <option value="">(All Folders)</option>
-                ${folders.map(f => {
-                  const type = getFolderType(f);
-                  return `<option value="${f.id}">${f.name} (${getFolderTypeDisplay(type)})</option>`;
-                }).join("")}
-              </select>
-            </div>
-            <label for="matchMode">Match Mode</label>
-            <div class="form-group">
-              <select name="matchMode" id="matchMode" style="width:100%;">
-                <option value="all">All Text</option>
-                <option value="path">Paths Only</option>
-                <option value="filename">Filenames Only</option>
-              </select>
-            </div>
-            <fieldset>
-              <legend>Update These Document Types</legend>
-              <div class="two-column">
-                <label><input type="checkbox" name="updateActors"/> Actors</label><br/>
-                <label><input type="checkbox" name="updateItems"/> Items</label><br/>
-                <label><input type="checkbox" name="updateScenes"/> Scenes</label><br/>
-                <label><input type="checkbox" name="updateJournals"/> Journals</label><br/>
-                <label><input type="checkbox" name="updateTables"/> Roll Tables</label><br/>
-                <label><input type="checkbox" name="updatePlaylists"/> Playlists</label>
-              </div>
-            </fieldset>
-            <fieldset>
-              <legend>Target Fields</legend>
-              <div class="two-column">
-                <label><input type="checkbox" name="targetImages"/> Images</label><br/>
-                <label><input type="checkbox" name="targetText"/> Text</label><br/>
-                <label><input type="checkbox" name="targetAudio"/> Audio</label>
-              </div>
-            </fieldset>
-            <div class="form-group" style="margin-top:1em;">
-              <button type="button" name="clearFields" class="button-clear">CLEAR</button>
-              <button type="button" name="runReport" class="button-search">RUN REPORT</button>
-              <button type="button" name="runReplace" class="button-replace">MASS REPLACE</button>
-            </div>
-          </form>
-        </div>
-        <div id="report-area" class="text-replacer-right">
-          <p>Always back up your files files before running a mass change.</p>
-          <p>Run a search before doing a mass replace to verify what will be changed.</p>
-        </div>
-      </div>`);
-    return container;
-  }
-})().render(true);
+})().render({ force: true });
 
 // Helper to bold the search string in a value
 function boldSearch(str, search) {

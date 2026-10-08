@@ -44,8 +44,9 @@ characters.forEach((character) => {
     listOptions += `<option value='${character.uuid}' ${selected}>${character.name}</option>`;
 });
 
-let replaceDialog = new Dialog({
-    title: macroName,
+let replaceDialog = new foundry.applications.api.DialogV2({
+    id: "replaceDialog",
+    window: { title: macroName, resizable: true },
     content: `<label style="${labelStyle}" for="characters">Actor:</label><select style="${selectStyle}" id="characters" name="characters"><option value='focused'>Use In-Focus Actor based on Sheet</option><option disabled>----------</option>${listOptions}</select>
  
  <hr>
@@ -81,11 +82,13 @@ let replaceDialog = new Dialog({
  <label style="${labelStyle}" for="oldPronouns">Old Pronouns:</label><input type="text" id="oldPronouns" list="oldPronounsList" style="${selectStyle}" value="{she}/{her}/{hers}/{her_}/{herself}"><datalist id="oldPronounsList" name="oldPronouns"><option value="{she}/{her}/{hers}/{her_}/{herself}"><option value="he/him/his/him/himself"><option value="it/its/its/it/itself"><option value="she/her/hers/her/herself"><option value="they/them/their/them/themself"></datalist>
  
  <label style="${labelStyle}" for="newPronouns">New Pronouns:</label><input type="text" list="newPronounsList" style="${selectStyle}" value="${pronounDefault}" id="newPronouns"><datalist id="newPronounsList" name="newPronouns"><option value="{she}/{her}/{hers}/{her_}/{herself}"><option value="he/him/his/him/himself"><option value="it/its/its/it/itself"><option value="she/her/hers/her/herself"><option value="they/them/their/them/themself"></datalist></input></div>`,
-    buttons: {
-        one: {
-            icon: '<i class="fas fa-feather"></i>',
+    buttons: [
+        {
+            action: "one",
+            icon: "fas fa-feather",
             label: "Edit Desc.",
-            callback: async (html) => {
+            callback: async (event, button, dialog) => {
+                const html = dialog.element;
                 const charSelect = html.querySelector('select#characters');
                 let charUuid = charSelect ? charSelect.value : '';
                 const oldNameInput = html.querySelector('input#oldName');
@@ -279,10 +282,12 @@ let replaceDialog = new Dialog({
             }
 
         },
-        name: {
-            icon: '<i class="fas fa-signature"></i>',
-            label: 'Clean Names',
-            callback: async (html) => {
+        {
+            action: "name",
+            icon: "fas fa-signature",
+            label: "Clean Names",
+            callback: async (event, button, dialog) => {
+                const html = dialog.element;
                 const charSelect = html.querySelector('select#characters');
                 let charUuid = charSelect ? charSelect.value : '';
                 let selected;
@@ -333,14 +338,12 @@ let replaceDialog = new Dialog({
 
             }
         },
-        close: {
-            icon: '<i class="fas fa-times"></i>',
-            label: "Close"
+        {
+            action: "close",
+            icon: "fas fa-times",
+            label: "Close",
+            default: true
         }
-    },
-    default: "close"
-}, {
-    id: "replaceDialog",
-    resizable: true
+    ]
 });
-replaceDialog.render(true);
+replaceDialog.render({ force: true });

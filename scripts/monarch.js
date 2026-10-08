@@ -336,12 +336,12 @@ class CoffeePubMonarch {
             const isGM = game.user.isGM;
             
             const content = `
-                <form>
+                <div>
                     <h2 style="margin-bottom: 0.5em;">Import Module Settings</h2>
                     <div class="form-group">
                         <label>Import JSON File</label>
                         <div class="form-fields">
-                            <input type="file" accept=".json" required>
+                            <input type="file" accept=".json">
                         </div>
                     </div>
                     <div class="form-group">
@@ -367,28 +367,21 @@ class CoffeePubMonarch {
                         </p>
                     </div>
                     <p class="notes">You will be able to preview the changes before the final import. Make sure to backup your settings first!</p>
-                </form>`;
+                </div>`;
 
-            const dialog = new Dialog({
-                title: "Import Module Settings",
+            const dialog = new foundry.applications.api.DialogV2({
+                window: { title: "Import Module Settings" },
                 content: content,
-                buttons: {
-                    import: {
-                        icon: '<i class="fas fa-file-import"></i>',
+                buttons: [
+                    {
+                        action: "import",
+                        icon: "fas fa-file-import",
                         label: "Import",
-                        callback: async (html) => {
-                            // In v13, Dialog callbacks receive the form element
-                            // Ensure html is a DOM element (it should be, but add safety check)
-                            let form = html;
-                            if (!(html instanceof HTMLElement)) {
-                                // Try to unwrap if it's a jQuery object or array-like
-                                form = html?.[0] || html;
-                            }
-                            // If still not an HTMLElement, try to find the form
-                            if (!(form instanceof HTMLElement)) {
-                                form = document.querySelector('form') || html;
-                            }
-                            
+                        default: true,
+                        callback: async (event, button, dialog) => {
+                            // DialogV2 wraps the content in a <form>; button.form is that element
+                            const form = button.form;
+
                             const fileInput = form.querySelector('input[type="file"]');
                             if (!fileInput) return;
                             const file = fileInput.files[0];
@@ -542,7 +535,7 @@ class CoffeePubMonarch {
                                                     <i class="fas fa-square"></i> Select None
                                                 </button>
                                             </div>
-                                            <div class="available-modules" style="max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9;">
+                                            <div class="available-modules" style="max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9; color: #222;">
                                                 ${availableModules.length ? moduleCheckboxes : '<p>No modules available to import</p>'}
                                             </div>
                                         </div>
@@ -556,20 +549,13 @@ class CoffeePubMonarch {
                                         ` : ''}
                                         <p class="notes">Uncheck any modules you don't want to import settings from.</p>`;
 
-                                    const previewDialog = new Dialog({
-                                        title: "Import Preview",
+                                    foundry.applications.api.DialogV2.wait({
+                                        window: { title: "Import Preview", resizable: true },
+                                        position: { width: 600 },
                                         content: previewContent,
-                                        render: (html) => {
-                                            // In v13, Dialog render hooks receive the dialog element
-                                            // Ensure html is a DOM element
-                                            let dialogElement = html;
-                                            if (!(html instanceof HTMLElement)) {
-                                                dialogElement = html?.[0] || html;
-                                            }
-                                            if (!(dialogElement instanceof HTMLElement)) {
-                                                dialogElement = document.querySelector('.window-app.dialog') || html;
-                                            }
-                                            
+                                        render: (event, dialog) => {
+                                            const dialogElement = dialog.element;
+
                                             // Add event handlers for Select All/None buttons
                                             const selectAllBtn = dialogElement.querySelector('.select-all-modules');
                                             if (selectAllBtn) {
@@ -588,20 +574,15 @@ class CoffeePubMonarch {
                                                 });
                                             }
                                         },
-                                        buttons: {
-                                            proceed: {
-                                                icon: '<i class="fas fa-file-import"></i>',
+                                        buttons: [
+                                            {
+                                                action: "proceed",
+                                                icon: "fas fa-file-import",
                                                 label: "Proceed with Import",
-                                                callback: async (html) => {
+                                                default: true,
+                                                callback: async (event, button, dialog) => {
                                                     try {
-                                                        // In v13, Dialog callbacks receive the form element
-                                                        let form = html;
-                                                        if (!(html instanceof HTMLElement)) {
-                                                            form = html?.[0] || html;
-                                                        }
-                                                        if (!(form instanceof HTMLElement)) {
-                                                            form = document.querySelector('form') || html;
-                                                        }
+                                                        const form = button.form;
                                                         // Get selected modules from checkboxes
                                                         const selectedModules = new Set();
                                                         form.querySelectorAll('.module-import-checkbox:checked').forEach(checkbox => {
@@ -760,23 +741,25 @@ class CoffeePubMonarch {
                                                             ${!isGM ? '<p class="notes">Note: As a player, you can only import personal (client- and user-scoped) settings. World-scoped settings require GM permissions.</p>' : ''}
                                                             <p class="notes">Note: Some settings may require a page reload to take effect.</p>`;
 
-                                                        const successDialog = new Dialog({
-                                                            title: title,
+                                                        const successDialog = new foundry.applications.api.DialogV2({
+                                                            window: { title: title },
                                                             content: successContent,
-                                                            buttons: {
-                                                                reload: {
-                                                                    icon: '<i class="fas fa-sync"></i>',
+                                                            buttons: [
+                                                                {
+                                                                    action: "reload",
+                                                                    icon: "fas fa-sync",
                                                                     label: "Reload Now",
                                                                     callback: () => window.location.reload()
                                                                 },
-                                                                close: {
-                                                                    icon: '<i class="fas fa-times"></i>',
-                                                                    label: "Close"
+                                                                {
+                                                                    action: "close",
+                                                                    icon: "fas fa-times",
+                                                                    label: "Close",
+                                                                    default: true
                                                                 }
-                                                            },
-                                                            default: "close"
+                                                            ]
                                                         });
-                                                        successDialog.render(true);
+                                                        successDialog.render({ force: true });
 
                                                     } catch (error) {
                                                         console.error("COFFEE PUB • MONARCH | Error importing settings:", error);
@@ -784,14 +767,13 @@ class CoffeePubMonarch {
                                                     }
                                                 }
                                             },
-                                            cancel: {
-                                                icon: '<i class="fas fa-times"></i>',
+                                            {
+                                                action: "cancel",
+                                                icon: "fas fa-times",
                                                 label: "Cancel"
                                             }
-                                        },
-                                        default: "proceed"
+                                        ]
                                     });
-                                    previewDialog.render(true);
                                 };
                                 reader.readAsText(file);
                             } catch (error) {
@@ -800,16 +782,16 @@ class CoffeePubMonarch {
                             }
                         }
                     },
-                    cancel: {
-                        icon: '<i class="fas fa-times"></i>',
+                    {
+                        action: "cancel",
+                        icon: "fas fa-times",
                         label: "Cancel"
                     }
-                },
-                default: "import"
+                ]
             });
-            dialog.render(true);
+            dialog.render({ force: true });
         };
-        
+
         // Remove old listeners if they exist (stored in WeakMap)
         const oldHandlers = this._handlerStorage.get(html);
         if (oldHandlers?.importHandler) {
@@ -909,8 +891,8 @@ class CoffeePubMonarch {
             const data = JSON.stringify(exportData, null, 2);
             
             // Use Foundry's built-in saveDataToFile
-            saveDataToFile(data, "text/json", filename);
-            
+            foundry.utils.saveDataToFile(data, "text/json", filename);
+
             // Show success notification
             ui.notifications.info(`Settings exported successfully to ${filename}. (${exportData.totalSettings} settings across ${Object.keys(out).length} namespaces)`);
         };
@@ -1075,7 +1057,7 @@ class CoffeePubMonarch {
                 
                 return `<div style="margin-bottom: 10px; padding: 5px; border-left: 3px solid ${isInstalled ? '#51cf66' : '#ff6b6b'}; padding-left: 10px;">
                     <input type="checkbox" id="${checkboxId}" class="monarch-namespace-checkbox" data-namespace="${ns}" ${isChecked ? 'checked' : ''}>
-                    <label for="${checkboxId}" style="font-weight: bold;">${ns}</label> ${status} <span style="color: #666;">(${settings.length} settings)</span>
+                    <label for="${checkboxId}" style="font-weight: bold; color: #222;">${ns}</label> ${status} <span style="color: #666;">(${settings.length} settings)</span>
                     ${settingsList}
                 </div>`;
             }).join('');
@@ -1084,44 +1066,39 @@ class CoffeePubMonarch {
             const orphanedCount = settingsToPrune.length;
             
             const combinedContent = `
+                <div style="display: block;">
                 <h3>Settings Report & Prune</h3>
                 <p>NOTE: Pruning is still young. Removal now goes through Foundry's Setting documents, so it should genuinely delete — back up your world before a large prune.</p>
                 <p>Orphaned settings (from missing modules) are pre-checked.</p>
                 <p>Only world- and user-scoped settings can be pruned. Client-scoped settings live in browser storage alongside data modules keep there for their own purposes — including credentials and recoverable documents — which cannot be reliably told apart from settings, so orphaned client entries are neither listed nor removed.</p>
-                <div style="margin-bottom: 10px;">
-                    <button type="button" id="monarch-select-all" style="margin-right: 5px;">Select All</button>
-                    <button type="button" id="monarch-select-none">Select None</button>
+                <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                    <button type="button" id="monarch-select-all" style="flex: 0 0 auto; width: auto;">Select All</button>
+                    <button type="button" id="monarch-select-none" style="flex: 0 0 auto; width: auto;">Select None</button>
                 </div>
                 <div class="form-group">
-                    <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9;">
+                    <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9; color: #222;">
                         ${namespaceList}
                     </div>
                 </div>
                 <p><strong>Total:</strong> ${totalSettings} settings across ${sortedNamespaces.length} namespaces</p>
                 ${orphanedCount > 0 ? `<p class="notes" style="color: #ff6b6b;"><strong>Orphaned:</strong> ${orphanedCount} settings from uninstalled modules (pre-checked)</p>` : '<p class="notes" style="color: #51cf66;">✓ All settings belong to installed modules or systems.</p>'}
-                <p class="notes" style="color: #ff6b6b;"><strong>Warning:</strong> This action cannot be undone. Make sure you have a backup if you want to restore these settings later.</p>`;
+                <p class="notes" style="color: #ff6b6b;"><strong>Warning:</strong> This action cannot be undone. Make sure you have a backup if you want to restore these settings later.</p>
+                </div>`;
             
-            const combinedDialog = new Dialog({
-                title: "Settings Report & Prune",
+            foundry.applications.api.DialogV2.wait({
+                window: { title: "Settings Report & Prune", resizable: true },
+                position: { width: 700 },
                 content: combinedContent,
-                buttons: {
-                    proceed: {
-                        icon: '<i class="fas fa-broom"></i>',
+                buttons: [
+                    {
+                        action: "proceed",
+                        icon: "fas fa-broom",
                         label: "Prune Selected",
-                        callback: async (html) => {
+                        default: true,
+                        callback: async (event, button, dialog) => {
                             try {
-                                // Handle both jQuery (v12) and DOM element (v13) formats
-                                // In v13, Dialog callbacks receive the form element
-                                let element = html;
-                                if (!(html instanceof HTMLElement)) {
-                                    // Try to unwrap if it's a jQuery object or array-like
-                                    element = html?.[0] || html;
-                                }
-                                // If still not an HTMLElement, try to find the dialog content
-                                if (!(element instanceof HTMLElement)) {
-                                    element = document.querySelector('.window-content') || html;
-                                }
-                                
+                                const element = button.form;
+
                                 // Get all checked settings from the dialog
                                 const checkedSettings = [];
                                 const settingCheckboxes = element.querySelectorAll('.monarch-setting-checkbox:checked');
@@ -1267,40 +1244,41 @@ class CoffeePubMonarch {
                                     ${stillInstalledWarning}
                                     ${stillInstalledModules.size === 0 ? '<p class="notes">Settings have been permanently removed from the database.</p>' : ''}`;
                                 
-                                const successDialog = new Dialog({
-                                    title: "Prune Complete",
+                                const successDialog = new foundry.applications.api.DialogV2({
+                                    window: { title: "Prune Complete" },
                                     content: successContent,
-                                    buttons: {
-                                        reload: {
-                                            icon: '<i class="fas fa-sync"></i>',
+                                    buttons: [
+                                        {
+                                            action: "reload",
+                                            icon: "fas fa-sync",
                                             label: "Reload Now",
                                             callback: () => window.location.reload()
                                         },
-                                        close: {
-                                            icon: '<i class="fas fa-times"></i>',
-                                            label: "Close"
+                                        {
+                                            action: "close",
+                                            icon: "fas fa-times",
+                                            label: "Close",
+                                            default: true
                                         }
-                                    },
-                                    default: "close"
+                                    ]
                                 });
-                                successDialog.render(true);
-                                
+                                successDialog.render({ force: true });
+
                             } catch (error) {
                                 console.error("COFFEE PUB • MONARCH | Error pruning settings:", error);
                                 ui.notifications.error("COFFEE PUB • MONARCH | Failed to prune settings. Check the console for details.");
                             }
                         }
                     },
-                    cancel: {
-                        icon: '<i class="fas fa-times"></i>',
+                    {
+                        action: "cancel",
+                        icon: "fas fa-times",
                         label: "Cancel"
                     }
-                },
-                default: "proceed",
-                render: (html) => {
-                    // Handle both jQuery (v12) and DOM element (v13) formats
-                    const element = html.jquery ? html[0] : html;
-                    
+                ],
+                render: (event, dialog) => {
+                    const element = dialog.element;
+
                     // Add event handlers for namespace checkboxes (toggle all settings in namespace)
                     element.querySelectorAll('.monarch-namespace-checkbox').forEach(checkbox => {
                         checkbox.addEventListener('change', function() {
@@ -1346,7 +1324,6 @@ class CoffeePubMonarch {
                     }
                 }
             });
-            combinedDialog.render(true);
         };
         
         // Remove old prune listener if it exists
@@ -1602,31 +1579,24 @@ class CoffeePubMonarch {
                 });
                 
                 const content = `
-                    <form>
-                        <div class="form-group">
-                            <label>${game.i18n.localize(`${this.ID}.moduleSet.savePrompt`)}</label>
-                            <div class="form-fields">
-                                <input type="text" name="setName" required>
-                            </div>
+                    <div class="form-group stacked">
+                        <label>Module Set Name</label>
+                        <div class="form-fields">
+                            <input type="text" name="setName">
                         </div>
-                    </form>`;
+                    </div>`;
 
-                const dialog = new Dialog({
-                    title: game.i18n.localize(`${this.ID}.moduleSet.title`),
+                const dialog = new foundry.applications.api.DialogV2({
+                    window: { title: game.i18n.localize(`${this.ID}.moduleSet.title`) },
                     content: content,
-                    buttons: {
-                        saveAndApply: {
-                            icon: '<i class="fas fa-save"></i>',
+                    buttons: [
+                        {
+                            action: "saveAndApply",
+                            icon: "fas fa-save",
                             label: "Save and Reload",
-                            callback: async (html) => {
-                                // In v13, Dialog callbacks receive the form element directly
-                                let form = html;
-                                if (!(html instanceof HTMLElement)) {
-                                    form = html?.[0] || html;
-                                }
-                                if (!(form instanceof HTMLElement)) {
-                                    form = document.querySelector('form') || html;
-                                }
+                            default: true,
+                            callback: async (event, button, dialog) => {
+                                const form = button.form;
                                 // Use querySelector to find the input field
                                 const setNameInput = form.querySelector?.('input[name="setName"]');
                                 if (!setNameInput) return;
@@ -1652,18 +1622,12 @@ class CoffeePubMonarch {
                                 }
                             }
                         },
-                        saveOnly: {
-                            icon: '<i class="fas fa-save"></i>',
+                        {
+                            action: "saveOnly",
+                            icon: "fas fa-save",
                             label: "Save Only",
-                            callback: async (html) => {
-                                // In v13, Dialog callbacks receive the form element directly
-                                let form = html;
-                                if (!(html instanceof HTMLElement)) {
-                                    form = html?.[0] || html;
-                                }
-                                if (!(form instanceof HTMLElement)) {
-                                    form = document.querySelector('form') || html;
-                                }
+                            callback: async (event, button, dialog) => {
+                                const form = button.form;
                                 // Use querySelector to find the input field
                                 const setNameInput = form.querySelector?.('input[name="setName"]');
                                 if (!setNameInput) return;
@@ -1690,15 +1654,15 @@ class CoffeePubMonarch {
                                 }
                             }
                         },
-                        cancel: {
-                            icon: '<i class="fas fa-times"></i>',
+                        {
+                            action: "cancel",
+                            icon: "fas fa-times",
                             label: "Cancel"
                         }
-                    },
-                    default: 'saveAndApply'
+                    ]
                 });
 
-                dialog.render(true);
+                dialog.render({ force: true });
             });
         }
 
@@ -1718,13 +1682,15 @@ class CoffeePubMonarch {
                     if (checkbox.checked) currentModules.push(checkbox.name);
                 });
 
-            const dialog = new Dialog({
-                title: game.i18n.localize(`${this.ID}.moduleSet.title`),
+            const dialog = new foundry.applications.api.DialogV2({
+                window: { title: game.i18n.localize(`${this.ID}.moduleSet.title`) },
                 content: `<p>Update "${setName}" with current module selection?</p>`,
-                buttons: {
-                    updateAndApply: {
-                        icon: '<i class="fas fa-save"></i>',
+                buttons: [
+                    {
+                        action: "updateAndApply",
+                        icon: "fas fa-save",
                         label: "Update and Reload",
+                        default: true,
                         callback: async () => {
                             try {
                                 // Update the module set
@@ -1745,8 +1711,9 @@ class CoffeePubMonarch {
                             }
                         }
                     },
-                    updateOnly: {
-                        icon: '<i class="fas fa-save"></i>',
+                    {
+                        action: "updateOnly",
+                        icon: "fas fa-save",
                         label: "Update Only",
                         callback: async () => {
                             // Update the module set
@@ -1755,15 +1722,15 @@ class CoffeePubMonarch {
                             await game.settings.set(this.ID, 'moduleSets', updatedModuleSets);
                         }
                     },
-                    cancel: {
-                        icon: '<i class="fas fa-times"></i>',
+                    {
+                        action: "cancel",
+                        icon: "fas fa-times",
                         label: "Cancel"
                     }
-                },
-                default: 'updateAndApply'
+                ]
             });
 
-                dialog.render(true);
+                dialog.render({ force: true });
             });
         }
 
@@ -1875,8 +1842,8 @@ class CoffeePubMonarch {
                 const setName = select.value;
                 if (!setName) return;
 
-                const confirm = await Dialog.confirm({
-                    title: game.i18n.localize(`${this.ID}.moduleSet.title`),
+                const confirm = await foundry.applications.api.DialogV2.confirm({
+                    window: { title: game.i18n.localize(`${this.ID}.moduleSet.title`) },
                     content: game.i18n.format(`${this.ID}.moduleSet.deleteConfirm`, {name: setName}),
                 });
 
@@ -1927,7 +1894,7 @@ class CoffeePubMonarch {
                 const filename = `monarch-module-sets-${timestamp}.json`;
                 const data = JSON.stringify(exportData, null, 2);
                 // Use Foundry's built-in saveDataToFile
-                saveDataToFile(data, "text/json", filename);
+                foundry.utils.saveDataToFile(data, "text/json", filename);
 
                 // Show success notification
                 ui.notifications.info(`Module Sets exported successfully to ${filename}.`);
@@ -1944,33 +1911,28 @@ class CoffeePubMonarch {
                 event.preventDefault();
 
             const content = `
-                <form>
+                <div>
                     <h2 style="margin-bottom: 0.5em;">Import Module Sets</h2>
                     <div class="form-group">
                         <label>Import JSON</label>
                         <div class="form-fields">
-                            <input type="file" accept=".json" required>
+                            <input type="file" accept=".json">
                         </div>
                     </div>
                     <p class="notes">Warning: This will replace your current module sets.</p>
-                </form>`;
+                </div>`;
 
-            const dialog = new Dialog({
-                title: "Import Module Sets",
+            const dialog = new foundry.applications.api.DialogV2({
+                window: { title: "Import Module Sets" },
                 content: content,
-                buttons: {
-                    import: {
-                        icon: '<i class="fas fa-file-import"></i>',
+                buttons: [
+                    {
+                        action: "import",
+                        icon: "fas fa-file-import",
                         label: "Import",
-                        callback: async (html) => {
-                            // In v13, Dialog callbacks receive the form element
-                            let form = html;
-                            if (!(html instanceof HTMLElement)) {
-                                form = html?.[0] || html;
-                            }
-                            if (!(form instanceof HTMLElement)) {
-                                form = document.querySelector('form') || html;
-                            }
+                        default: true,
+                        callback: async (event, button, dialog) => {
+                            const form = button.form;
                             const fileInput = form.querySelector('input[type="file"]');
                             if (!fileInput) return;
                             const file = fileInput.files[0];
@@ -2011,12 +1973,13 @@ class CoffeePubMonarch {
                                             </div>
                                         </div>`;
 
-                                    const analysisDialog = new Dialog({
-                                        title: "Import Analysis",
+                                    const analysisDialog = new foundry.applications.api.DialogV2({
+                                        window: { title: "Import Analysis" },
                                         content: analysisContent,
-                                        buttons: {
-                                            save: {
-                                                icon: '<i class="fas fa-save"></i>',
+                                        buttons: [
+                                            {
+                                                action: "save",
+                                                icon: "fas fa-save",
                                                 label: "Save Analysis",
                                                 callback: () => {
                                                     const analysisText = `
@@ -2030,17 +1993,18 @@ Extra Modules (installed but not in sets):
 ${extraModules.length ? extraModules.join('\n') : 'None'}`;
 
                                                     const filename = `module-sets-analysis-${new Date().toISOString().split('T')[0]}.txt`;
-                                                    saveDataToFile(analysisText, "text/plain", filename);
+                                                    foundry.utils.saveDataToFile(analysisText, "text/plain", filename);
                                                 }
                                             },
-                                            close: {
-                                                icon: '<i class="fas fa-times"></i>',
-                                                label: "Close"
+                                            {
+                                                action: "close",
+                                                icon: "fas fa-times",
+                                                label: "Close",
+                                                default: true
                                             }
-                                        },
-                                        default: "close"
+                                        ]
                                     });
-                                    analysisDialog.render(true);
+                                    analysisDialog.render({ force: true });
 
                                     // Update the dropdown
                                     // In v13, find the module management window and look for our controls
@@ -2058,24 +2022,26 @@ ${extraModules.length ? extraModules.join('\n') : 'None'}`;
                                     }
 
                                     // Show reload prompt
-                                    const reloadDialog = new Dialog({
-                                        title: "Reload Required",
+                                    const reloadDialog = new foundry.applications.api.DialogV2({
+                                        window: { title: "Reload Required" },
                                         content: `<p>Module sets have been imported successfully. The page needs to be reloaded for the changes to take full effect.</p>`,
-                                        buttons: {
-                                            reload: {
-                                                icon: '<i class="fas fa-sync"></i>',
+                                        buttons: [
+                                            {
+                                                action: "reload",
+                                                icon: "fas fa-sync",
                                                 label: "Reload Now",
+                                                default: true,
                                                 callback: () => window.location.reload()
                                             },
-                                            later: {
-                                                icon: '<i class="fas fa-clock"></i>',
+                                            {
+                                                action: "later",
+                                                icon: "fas fa-clock",
                                                 label: "Reload Later",
                                                 callback: () => ui.notifications.info("Remember to reload when convenient to see imported module sets.")
                                             }
-                                        },
-                                        default: "reload"
+                                        ]
                                     });
-                                    reloadDialog.render(true);
+                                    reloadDialog.render({ force: true });
                                 };
                                 reader.readAsText(file);
                             } catch (error) {
@@ -2084,14 +2050,14 @@ ${extraModules.length ? extraModules.join('\n') : 'None'}`;
                             }
                         }
                     },
-                    cancel: {
-                        icon: '<i class="fas fa-times"></i>',
+                    {
+                        action: "cancel",
+                        icon: "fas fa-times",
                         label: "Cancel"
                     }
-                },
-                default: "import"
+                ]
             });
-            dialog.render(true);
+            dialog.render({ force: true });
             });
         }
     }
